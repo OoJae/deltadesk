@@ -15,16 +15,28 @@ Pools: NVDA, SPY, TSLA, QQQ-SPY (or the full key, e.g. NVDA-USDG).
 
 from __future__ import annotations
 
+import hmac
+import os
 import time
 from datetime import datetime
 from functools import lru_cache
 
 import polars as pl
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 
 from api import live
 
 app = FastAPI(title="DeltaDesk", version="0.1.0", description="The open market-making desk for tokenized stocks: LP truth layer API.")
+
+# Premium routes are sold over x402 (Bankr x402 Cloud proxies here with this key). If DELTADESK_API_KEY is unset
+# (local dev) every route is open.
+API_KEY = os.environ.get("DELTADESK_API_KEY", "")
+
+
+def premium(x_deltadesk_key: str = Header(default="")):
+    if API_KEY and not hmac.compare_digest(x_deltadesk_key, API_KEY):
+        raise HTTPException(402, "premium endpoint: pay per call via x402 (see /health for the marketplace URL)")
+
 
 DISCLAIMER = "Informational analytics, not investment advice. Self-markout and HL-referenced estimates; see /study for method."
 STUDY = live.DATA / "study"
@@ -112,7 +124,7 @@ def fair_value(pool: str):
     }
 
 
-@app.get("/safe-to-lp/{pool}")
+@app.get("/safe-to-lp/{pool}", dependencies=[Depends(premium)])
 def safe_to_lp(pool: str):
     p = _pool(pool)
     now = time.time()
@@ -137,7 +149,7 @@ def safe_to_lp(pool: str):
     }
 
 
-@app.get("/pool-toxicity/{pool}")
+@app.get("/pool-toxicity/{pool}", dependencies=[Depends(premium)])
 def pool_toxicity(pool: str):
     p = _pool(pool)
     reg = live.regime_at(time.time())
@@ -161,7 +173,7 @@ def study():
     return {"title": "Can LPs beat LVR on tokenized stocks?", "by_pool": by_pool.to_dicts(), "by_regime": by_regime.to_dicts(), "disclaimer": DISCLAIMER}
 
 
-@app.get("/tearsheet/{chain}/{wallet}")
+@app.get("/tearsheet/{chain}/{wallet}", dependencies=[Depends(premium)])
 def tearsheet(chain: str, wallet: str):
     if chain not in ("robinhood", "4663"):
         raise HTTPException(501, "only Robinhood Chain (4663) for now; Base/Aerodrome coming in M1.3")
@@ -172,7 +184,7 @@ def tearsheet(chain: str, wallet: str):
     return {**build(wallet.lower()), "disclaimer": DISCLAIMER}
 
 
-@app.get("/lp-league")
+@app.get("/lp-league", dependencies=[Depends(premium)])
 def lp_league(limit: int = 50):
     f = STUDY / "m1" / "positions" / "owners.parquet"
     if not f.exists():
