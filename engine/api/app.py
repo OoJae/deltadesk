@@ -53,6 +53,14 @@ def _pool(name: str) -> live.Pool:
         raise HTTPException(404, str(e)) from e
 
 
+def rows(df: pl.DataFrame) -> list[dict]:
+    """to_dicts() with NaN/±inf → None (JSON has no NaN; edges are inf when nothing was picked off)."""
+    floats = [c for c, t in df.schema.items() if t in (pl.Float32, pl.Float64)]
+    if floats:
+        df = df.with_columns([pl.when(pl.col(c).is_finite()).then(pl.col(c)).otherwise(None).alias(c) for c in floats])
+    return df.to_dicts()
+
+
 @lru_cache(maxsize=8)
 def _table(name: str, mtime: float) -> pl.DataFrame:
     return pl.read_parquet(STUDY / "m0" / f"{name}.parquet")
@@ -66,11 +74,23 @@ def table(name: str) -> pl.DataFrame:
 
 
 def hour_record(pool_key: str, how: int) -> dict | None:
+    """This hour-of-week's historical LP record: HL-referenced (1h) when available, else self-markout (M0)."""
+    hl = STUDY / "m1" / "hl_ref" / "by_how.parquet"
+    if hl.exists():
+        df = _scope_table(str(hl), hl.stat().st_mtime).filter((pl.col("pool") == pool_key) & (pl.col("how") == how))
+        if not df.is_empty():
+            r = rows(df)[0]
+            fees, picked = r.get("fee_1h") or 0.0, r.get("picked_hl_1h")
+            if picked is not None:
+                return {"swaps": r.get("n_1h"), "fees_usd": fees, "picked_1h_usd": picked, "edge_1h": fees / picked if picked > 0 else None,
+                        "lp_net_bps_1h": r.get("lp_net_hl_bps_1h"), "reference": "hyperliquid"}
     df = table("by_how").filter((pl.col("pool") == pool_key) & (pl.col("how") == how))
     if df.is_empty():
         return None
-    r = df.row(0, named=True)
-    return {"swaps": r["swaps"], "fees_usd": r["fee_usd"], "picked_1h_usd": r["picked_1h"], "edge_1h": r["edge_1h"], "lp_net_bps_1h": r["lp_net_bps_1h"]}
+    r = rows(df)[0]
+    picked = r["picked_1h"]
+    return {"swaps": r["swaps"], "fees_usd": r["fee_usd"], "picked_1h_usd": picked,
+            "edge_1h": r["fee_usd"] / picked if picked and picked > 0 else None, "lp_net_bps_1h": r["lp_net_bps_1h"], "reference": "self"}
 
 
 def assess(gap_bps: float, regime: live.Regime, hour: dict | None, chainlink_age_s: float | None) -> dict:
@@ -93,11 +113,14 @@ def assess(gap_bps: float, regime: live.Regime, hour: dict | None, chainlink_age
         worsen("BLOCK", "reopen window (Sun 19:50–Mon 00:20 or weekday 09:20–09:45 ET): LP edge historically < 1")
     if regime.name in ("WEEKEND_DARK", "HOLIDAY"):
         worsen("CAUTION", "US market closed: fair value is Hyperliquid's internal price, Chainlink is frozen")
-    if hour and hour["edge_1h"] is not None:
-        if hour["edge_1h"] < 0.5:
-            worsen("BLOCK", f"this hour of the week LPs historically lost {1 / max(hour['edge_1h'], 1e-9):.1f}x their fees (edge {hour['edge_1h']:.2f})")
-        elif hour["edge_1h"] < 1.0:
-            worsen("CAUTION", f"this hour of the week LPs historically lost money (edge {hour['edge_1h']:.2f})")
+    # Toxic hour = informed flow took back more than the fees. edge is only defined when takers gained (picked > 0);
+    # picked <= 0 means takers lost on average, which is good for LPs.
+    if hour and hour.get("edge_1h") is not None and (hour.get("picked_1h_usd") or 0) > 0:
+        e = hour["edge_1h"]
+        if e < 0.5:
+            worsen("BLOCK", f"this hour of the week informed flow historically took {1 / e:.1f}x what LPs earned in fees (edge {e:.2f})")
+        elif e < 1.0:
+            worsen("CAUTION", f"this hour of the week LPs historically lost money (edge {e:.2f})")
     if chainlink_age_s is not None and regime.name == "REGULAR" and chainlink_age_s > 3600:
         worsen("CAUTION", f"Chainlink feed is {chainlink_age_s / 3600:.1f} h old during regular hours")
     if not reasons:
@@ -159,8 +182,8 @@ def pool_toxicity(pool: str):
     return {
         "pool": p.key,
         "method": "self-markout vs pool mid 1h later (M0); HL-referenced version pending",
-        "by_regime": by_regime.to_dicts(),
-        "worst_hours_of_week": by_how.head(8).to_dicts(),
+        "by_regime": rows(by_regime),
+        "worst_hours_of_week": rows(by_how.head(8)),
         "current_hour": {"how": reg.how, **(hour_record(p.key, reg.how) or {})},
         "disclaimer": DISCLAIMER,
     }
@@ -170,7 +193,41 @@ def pool_toxicity(pool: str):
 def study():
     by_pool = table("by_pool").select("pool", "swaps", "vol_usd", "fee_usd", "picked_1h", "edge_1h", "lp_net_bps_1h")
     by_regime = table("by_regime").select("pool", "regime", "fee_usd", "picked_1h", "edge_1h", "lp_net_bps_1h")
-    return {"title": "Can LPs beat LVR on tokenized stocks?", "by_pool": by_pool.to_dicts(), "by_regime": by_regime.to_dicts(), "disclaimer": DISCLAIMER}
+    return {"title": "Can LPs beat LVR on tokenized stocks?", "by_pool": rows(by_pool), "by_regime": rows(by_regime), "disclaimer": DISCLAIMER}
+
+
+STUDY_SCOPES = {"m0": STUDY / "m0", "hl_ref": STUDY / "m1" / "hl_ref", "flow": STUDY / "m1" / "flow",
+                "positions": STUDY / "m1" / "positions", "backtest": STUDY / "m1" / "backtest"}
+NOT_PUBLIC = {"swaps", "hl_markouts", "segments", "attribution"}  # row-level tables: too large / served via premium routes
+
+
+@lru_cache(maxsize=64)
+def _scope_table(path: str, mtime: float) -> pl.DataFrame:
+    return pl.read_parquet(path)
+
+
+@app.get("/study/table/{scope}/{name}")
+def study_table(scope: str, name: str, pool: str | None = None):
+    """Public study tables (aggregates only), e.g. /study/table/hl_ref/by_regime?pool=NVDA."""
+    base = STUDY_SCOPES.get(scope)
+    if base is None or not name.replace("_", "").isalnum() or name in NOT_PUBLIC:
+        raise HTTPException(404, "unknown table")
+    f = base / f"{name}.parquet"
+    if not f.exists():
+        raise HTTPException(503, f"{scope}/{name} not built yet")
+    df = _scope_table(str(f), f.stat().st_mtime)
+    if pool and "pool" in df.columns:
+        df = df.filter(pl.col("pool") == _pool(pool).key)
+    return {"scope": scope, "name": name, "rows": rows(df)}
+
+
+@app.get("/study/tables")
+def study_tables():
+    out = {}
+    for scope, base in STUDY_SCOPES.items():
+        if base.exists():
+            out[scope] = sorted(f.stem for f in base.glob("*.parquet") if f.stem not in NOT_PUBLIC)
+    return out
 
 
 @app.get("/tearsheet/{chain}/{wallet}", dependencies=[Depends(premium)])
@@ -190,4 +247,4 @@ def lp_league(limit: int = 50):
     if not f.exists():
         raise HTTPException(503, "LP League not built yet")
     df = pl.read_parquet(f)
-    return {"rows": df.head(limit).to_dicts(), "disclaimer": DISCLAIMER}
+    return {"rows": rows(df.head(limit)), "disclaimer": DISCLAIMER}

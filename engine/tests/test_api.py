@@ -30,12 +30,14 @@ def test_reopen_windows_and_hour_of_week():
 
 def test_assess_verdicts():
     regular = live.regime_at(ts(2026, 9, 16, 11))
-    good_hour = {"edge_1h": 3.0}
+    good_hour = {"edge_1h": 3.0, "picked_1h_usd": 10.0}
     assert assess(1.0, regular, good_hour, 60)["verdict"] == "ALLOW"
     assert assess(PHI_BLOCK["REGULAR"] / 2 + 1, regular, good_hour, 60)["verdict"] == "CAUTION"
     assert assess(-(PHI_BLOCK["REGULAR"] + 1), regular, good_hour, 60)["verdict"] == "BLOCK"
-    assert assess(1.0, regular, {"edge_1h": 0.3}, 60)["verdict"] == "BLOCK"   # historically toxic hour
-    assert assess(1.0, regular, {"edge_1h": 0.8}, 60)["verdict"] == "CAUTION"
+    assert assess(1.0, regular, {"edge_1h": 0.3, "picked_1h_usd": 50.0}, 60)["verdict"] == "BLOCK"   # historically toxic hour
+    assert assess(1.0, regular, {"edge_1h": 0.8, "picked_1h_usd": 50.0}, 60)["verdict"] == "CAUTION"
+    # takers lost money this hour (picked < 0): good for LPs, never a reason to block
+    assert assess(1.0, regular, {"edge_1h": None, "picked_1h_usd": -40.0}, 60)["verdict"] == "ALLOW"
     weekend = live.regime_at(ts(2026, 9, 19, 12))
     assert assess(1.0, weekend, good_hour, 90_000)["verdict"] == "CAUTION"    # closed market, frozen oracle
     reopen = live.regime_at(ts(2026, 9, 21, 9, 25))
