@@ -242,9 +242,21 @@ def tearsheet(chain: str, wallet: str):
 
 
 @app.get("/lp-league", dependencies=[Depends(premium)])
-def lp_league(limit: int = 50):
-    f = STUDY / "m1" / "positions" / "owners.parquet"
+def lp_league(limit: int = 50, pool: str | None = None):
+    """LP managers (the wallet sending the LP txs) ranked by LP result vs holding, per $1k of capital per day."""
+    f = STUDY / "m1" / "league" / "league.parquet"
     if not f.exists():
         raise HTTPException(503, "LP League not built yet")
-    df = pl.read_parquet(f)
-    return {"rows": rows(df.head(limit)), "disclaimer": DISCLAIMER}
+    df = _scope_table(str(f), f.stat().st_mtime)
+    if pool:
+        df = df.filter(pl.col("pools").str.contains(_pool(pool).key, literal=True))
+    cols = ["rank", "manager", "positions", "pools", "capital_days_usd", "span_days", "vs_hodl_per_1k_day", "fees_per_1k_day",
+            "picked_off_per_1k_day", "edge_hl", "fees_usd", "picked_off_hl_usd", "vs_hodl_usd", "median_width_ticks",
+            "positions_per_day", "weekend_share", "jit_share", "nft_holders"]
+    return {
+        "method": "Managers = wallet sending the LP transactions. Score = LP result vs holding the deposited tokens (fees − impermanent loss, "
+                  "incl. value picked off by informed flow) per $1k of capital per day. Qualifies with ≥ $1.5k·days and ≥ 3 days.",
+        "count": df.height,
+        "rows": rows(df.select([c for c in cols if c in df.columns]).head(min(max(limit, 1), 500))),
+        "disclaimer": DISCLAIMER,
+    }

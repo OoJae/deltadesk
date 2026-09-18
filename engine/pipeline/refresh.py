@@ -33,6 +33,7 @@ STEPS = [
     ("study_m0", "markout.study", 0),
     ("hl_ref", "markout.hl_ref", 0),
     ("positions", "positions.attribute", 3600),
+    ("league", "league.build", 3600),
     ("flow", "flow.xray", 3600),
     ("backtest", "backtest.gap_exclusion", 6 * 3600),
 ]
