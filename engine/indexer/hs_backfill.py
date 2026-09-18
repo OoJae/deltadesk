@@ -12,6 +12,7 @@ Sources:
   npm_transfers   v3 NonfungiblePositionManager ERC-721 Transfers (position owner timelines)
   posm_transfers  v4 PositionManager ERC-721 Transfers
   swap_txs        sender (tx.from) + gas of every swap tx in covered pools (Flow X-ray)
+  base_*          Base (8453) Aerodrome Slipstream NVDAc/USDC: pool, gauge, LP txs, NPM transfers, swap senders, AERO/USDC price
 
     uv run python -m indexer.hs_backfill [source ...]
 Requires ENVIO_API_TOKEN in deltadesk/.env.
@@ -37,7 +38,8 @@ from indexer.backfill import POOL_MANAGER, SOURCES
 
 ROOT = Path(__file__).resolve().parents[2]
 RAW = ROOT / "data" / "raw"
-URL = "https://4663.hypersync.xyz"
+URLS = {"4663": "https://4663.hypersync.xyz", "8453": "https://8453.hypersync.xyz"}
+URL = URLS["4663"]
 
 NVDA_POOL = SOURCES["v3_nvda_usdg"]["address"]
 V4_POOL_IDS = SOURCES["v4_pools"]["topics"][1]
@@ -62,6 +64,8 @@ class Spec:
     keep_log_addresses: list[str] | None = None  # drop unrelated logs pulled in by JOIN_ALL
     log_fields: list | None = None  # override (e.g. just enough to join txs)
     chunk_blocks: int | None = None  # split into per-chunk files so a stalled stream only loses one chunk
+    chain: str = "4663"  # "4663" Robinhood Chain, "8453" Base
+    start_block: int = 0
 
 
 def _norm_topics(topics) -> list[list[str]]:
@@ -85,8 +89,31 @@ SPECS["swap_txs"] = Spec(
     logs=False,
     txs=True,
     log_fields=[LogField.BLOCK_NUMBER, LogField.TRANSACTION_HASH],
-    chunk_blocks=5_000_000,
+    chunk_blocks=250_000,  # HyperSync joined streams slow down super-linearly with range size
 )
+
+# ---- Base (8453): Aerodrome Slipstream NVDAc/USDC (M1.3, read-only) ----
+AERO_NVDA_POOL = "0x853f5f1b92b16714fe6cda67caad0856b83c7ab9"
+AERO_NVDA_GAUGE = "0x30d1e5af5ce39863e6f69a1f73ffb0e1ac9771a8"
+AERO_NPM_EQUITY = "0xe1f8cd9ac4e4a65f54f38a5cdafca44f6dd68b53"
+AERO_USDC_POOL = "0xccd9cc53b63662088c738b8bc06e9078fb8d9ad4"  # AERO/USDC CL200, for valuing AERO emissions
+T_GAUGE_DEPOSIT = "0x1c8ab8c7f45390d58f58f1d655213a82cca5d12179761a87c16f098813b8f211"   # Deposit(address,uint256,uint128)
+T_GAUGE_WITHDRAW = "0x8903a5b5d08a841e7f68438387f1da20c84dea756379ed37e633ff3854b99b84"  # Withdraw(address,uint256,uint128)
+BASE_START = 49_200_000  # just before the NVDAc pool's first log (49,273,475, Aug 24 2026)
+
+SPECS["base_aero_nvda"] = Spec([([AERO_NVDA_POOL], [])], chain="8453", start_block=BASE_START)
+SPECS["base_aero_gauge"] = Spec([([AERO_NVDA_GAUGE], [])], chain="8453", start_block=BASE_START)
+SPECS["base_aero_lp_txs"] = Spec(
+    selections=[([AERO_NVDA_POOL], [[T_V3_MINT, T_V3_BURN, T_V3_COLLECT]]), ([AERO_NVDA_GAUGE], [[T_GAUGE_DEPOSIT, T_GAUGE_WITHDRAW]])],
+    join=JoinMode.JOIN_ALL, txs=True, keep_log_addresses=[AERO_NVDA_POOL, AERO_NVDA_GAUGE, AERO_NPM_EQUITY],
+    chain="8453", start_block=BASE_START, chunk_blocks=250_000,
+)
+SPECS["base_npm_transfers"] = Spec([([AERO_NPM_EQUITY], [[T_TRANSFER]])], chain="8453", start_block=BASE_START)
+SPECS["base_aero_swap_txs"] = Spec(
+    selections=[([AERO_NVDA_POOL], [[T_V3_SWAP]])], logs=False, txs=True,
+    log_fields=[LogField.BLOCK_NUMBER, LogField.TRANSACTION_HASH], chain="8453", start_block=BASE_START, chunk_blocks=250_000,
+)
+SPECS["base_aero_usdc"] = Spec([([AERO_USDC_POOL], [[T_V3_SWAP]])], chain="8453", start_block=BASE_START)
 
 LOG_FIELDS = [LogField.BLOCK_NUMBER, LogField.TRANSACTION_INDEX, LogField.LOG_INDEX, LogField.TRANSACTION_HASH,
               LogField.ADDRESS, LogField.TOPIC0, LogField.TOPIC1, LogField.TOPIC2, LogField.TOPIC3, LogField.DATA]
@@ -115,13 +142,21 @@ def _int(df: pl.DataFrame, col: str) -> pl.Expr:
 
 
 async def fetch(client: hypersync.HypersyncClient, name: str, spec: Spec, to_block: int) -> None:
-    start = last_block_on_disk(name) + 1
+    start = max(last_block_on_disk(name) + 1, spec.start_block)
     if start >= to_block:
         print(f"{name}: up to date")
         return
     if spec.chunk_blocks:
         for lo in range(start, to_block, spec.chunk_blocks):
-            await fetch_range(client, name, spec, lo, min(lo + spec.chunk_blocks, to_block))
+            hi = min(lo + spec.chunk_blocks, to_block)
+            for attempt in range(4):  # a stalled stream costs one chunk, not the run
+                try:
+                    await asyncio.wait_for(fetch_range(client, name, spec, lo, hi), timeout=300)
+                    break
+                except asyncio.TimeoutError:
+                    print(f"{name}: chunk {lo}..{hi} timed out (attempt {attempt + 1}); retrying", flush=True)
+            else:
+                raise RuntimeError(f"{name}: chunk {lo}..{hi} failed after retries")
     else:
         await fetch_range(client, name, spec, start, to_block)
 
@@ -187,16 +222,19 @@ async def fetch_range(client: hypersync.HypersyncClient, name: str, spec: Spec, 
         tdf.write_parquet(out_dir / f"tx_{start:010d}_{to_block - 1:010d}.parquet")
         summary.append(f"{tdf.height:,} txs")
 
-    print(f"{name}: {', '.join(summary) or 'no data'} [{start}..{to_block - 1}] in {time.time() - t0:.0f}s")
+    print(f"{name}: {', '.join(summary) or 'no data'} [{start}..{to_block - 1}] in {time.time() - t0:.0f}s", flush=True)
 
 
 async def main():
     wanted = sys.argv[1:] or list(SPECS)
-    client = hypersync.HypersyncClient(ClientConfig(url=URL, bearer_token=token(), http_req_timeout_millis=120_000, max_num_retries=12))
-    height = await client.get_height()
-    print(f"hypersync height {height}")
+    clients, heights = {}, {}
     for name in wanted:
-        await fetch(client, name, SPECS[name], height)
+        chain = SPECS[name].chain
+        if chain not in clients:
+            clients[chain] = hypersync.HypersyncClient(ClientConfig(url=URLS[chain], bearer_token=token(), http_req_timeout_millis=120_000, max_num_retries=12))
+            heights[chain] = await clients[chain].get_height()
+            print(f"hypersync {chain} height {heights[chain]}", flush=True)
+        await fetch(clients[chain], name, SPECS[name], heights[chain])
 
 
 if __name__ == "__main__":
