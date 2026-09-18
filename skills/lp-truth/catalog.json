@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "slug": "lp-truth",
+  "provider": "DeltaDesk",
+  "providerUrl": "https://github.com/deltadesk",
+  "logo": "logo.svg",
+  "demo": {
+    "title": "lp-truth.txt",
+    "language": "text",
+    "code": "You:   LP $200 into NVDA on robinhood\nBankr: BLOCK — NVDA's pool is 18 bp above fair value (Hyperliquid 24/7),\n       and at this hour LPs historically lose 4x what they earn in fees.\n       Conditions change at 09:45 ET (after the open). Want me to wait?\n\n— later —\nYou:   how did my NVDA LP actually do?\nBankr: Net +$3.10 per $1k/day. Fees +$9.40, picked off by informed\n       flow −$5.20, IL vs holding −$0.80, gas −$0.30. Reconciled to\n       on-chain fees within 0.4 bp."
+  },
+  "setup": [
+    "Install the skill with the button below",
+    "Keep a little USDC on Base in your Bankr wallet (calls cost $0.002–$0.05)",
+    "Say: \"is it safe to LP NVDA right now?\"",
+    "Say: \"how did my LP actually do?\" for a full tearsheet"
+  ],
+  "install": {
+    "type": "bankr",
+    "repoPath": "lp-truth",
+    "command": "install the lp-truth skill from https://github.com/BankrBot/skills/tree/main/lp-truth"
+  }
+}
