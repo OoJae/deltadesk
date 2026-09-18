@@ -1,0 +1,17 @@
+[project]
+name = "deltadesk-engine"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.12"
+dependencies = [
+    "duckdb>=1.5.5",
+    "fastapi>=0.141.1",
+    "httpx>=0.28.1",
+    "hypersync>=1.2.1",
+    "numpy>=2.5.3",
+    "polars>=1.44.2",
+    "pyarrow>=25.0.1",
+    "pytest>=9.1.1",
+    "scikit-learn>=1.9.1",
+    "uvicorn>=0.53.0",
+]
