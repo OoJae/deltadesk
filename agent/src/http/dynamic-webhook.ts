@@ -8,9 +8,9 @@
  *      before (we answered 5xx) is processed again.
  *   4. wallet.delegation.created: decryptDelegatedWebhookData with our RSA key, seal the key share
  *      and wallet API key in the vault (AAD walletId|address|purpose), bind to the lane whose
- *      operator is this wallet. A wallet that owns a lane (a registered desk's owner, or on-chain
- *      factory.lanesOf(wallet) non-empty) is never decrypted nor stored; a chain-read failure
- *      answers 5xx so Dynamic retries.
+ *      operator is this wallet. A wallet that owns a lane (a registered desk's owner, or a lane
+ *      the factory LISTS under it: see factoryLaneOwnerProbe) is never decrypted nor stored; a
+ *      chain-read failure answers 5xx so Dynamic retries.
  *      wallet.delegation.revoked: recorded per event even for a wallet we never stored (sticky),
  *      then null the ciphertexts and mark the desk revoked. A created event that is not newer than
  *      a recorded revoke never (re)activates the wallet.
@@ -118,8 +118,9 @@ export interface WebhookDeps {
   /** Test seam; production loads @dynamic-labs-wallet/node on first use. */
   decrypt?: NodeSdk["decryptDelegatedWebhookData"];
   /**
-   * Does this wallet own a lane on-chain (factory.lanesOf)? Catches a delegated Vault before its
-   * desk is registered. A throw answers 5xx (Dynamic retries). Absent: registered desks only.
+   * Does this wallet own a lane on-chain (factoryLaneOwnerProbe: a lane the factory lists under
+   * it)? Catches a delegated Vault before its desk is registered. A throw answers 5xx (Dynamic
+   * retries). Absent: registered desks only.
    */
   isLaneOwner?: ((address: Address) => Promise<boolean>) | undefined;
   clock: Clock;
@@ -128,20 +129,50 @@ export interface WebhookDeps {
   maxBytes?: number;
 }
 
-/** factory.lanesOf(address) at the latest block: true when the wallet owns any lane. */
+/**
+ * Is this wallet a lane owner the factory LISTS: some lane in factory.lanesOf(wallet) with
+ * factory.listed(lane) true, read at one pinned block.
+ *
+ * Listing semantics: createLane is permissionless and anyone may deploy a lane NAMING any owner,
+ * but a lane enters lanesOf(owner) (and listed(lane) turns true, event LaneListed) only when the
+ * owner itself sends createLane, or later confirms a lane someone else deployed for it by sending
+ * createLane with the same params. So a listed lane proves the wallet acted as a Vault, and a
+ * stranger cannot make an Operator look like an owner (which would get its delegation refused)
+ * by deploying a lane in its name. listed(lane) is checked per lane so the probe relies on that
+ * rule, not on the shape of lanesOf.
+ *
+ * What it does NOT see: an UNLISTED lane, deployed by a third party with owner = wallet and never
+ * confirmed by the wallet. A Vault whose only lane is unlisted passes this probe, and its
+ * delegation is stored. Two purges cover it: POST /desks deletes our copy of the lane OWNER's
+ * delegation when that lane is registered (http/desks.ts), and a delegation that no registration
+ * has bound within 24 h is revoked by the unbound-delegation purge (main.ts,
+ * db.purgeUnboundDelegations). The signer only ever opens the delegation of a registered lane's
+ * operator, and the factory refuses operator == owner, so it is never used to sign meanwhile.
+ */
 export function factoryLaneOwnerProbe(
   chain: Pick<ChainClient, "call" | "blockNumber">,
   factory: Address,
 ): (address: Address) => Promise<boolean> {
   return async (address) => {
+    const blockNumber = await chain.blockNumber();
     const lanes = await readContract(chain, {
       address: factory,
       abi: deskLaneFactoryAbi,
       functionName: "lanesOf",
       args: [address],
-      blockNumber: await chain.blockNumber(),
+      blockNumber,
     });
-    return lanes.length > 0;
+    for (const lane of lanes) {
+      const listed = await readContract(chain, {
+        address: factory,
+        abi: deskLaneFactoryAbi,
+        functionName: "listed",
+        args: [lane],
+        blockNumber,
+      });
+      if (listed) return true;
+    }
+    return false;
   };
 }
 

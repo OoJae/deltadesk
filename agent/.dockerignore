@@ -1,0 +1,11 @@
+# Build context: agent/. The image installs its own node_modules (Linux addons) from the lockfile.
+node_modules
+data
+coverage
+dist
+test
+.env
+.env.*
+!.env.example
+*.pem
+*.sqlite*

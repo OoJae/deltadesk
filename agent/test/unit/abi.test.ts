@@ -4,7 +4,8 @@
  * encoded at all. The generated modules must match contracts/abi (the frozen interfaces).
  */
 
-import { readFileSync } from "node:fs";
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   type Abi,
@@ -16,10 +17,13 @@ import {
 import { describe, expect, it } from "vitest";
 import {
   CONTRACTS_ABI_DIR,
+  EXTRAS_SECTIONS,
   FORBIDDEN_FACTORY_FUNCTIONS,
   FORBIDDEN_LANE_FUNCTIONS,
   filterAbi,
+  mergeExtras,
   OUT_DIR,
+  readExtras,
   renderModules,
 } from "../../scripts/abi-sync.js";
 import {
@@ -168,6 +172,111 @@ describe("generated ABIs", () => {
     for (const [file, content] of Object.entries(modules)) {
       expect(readFileSync(join(OUT_DIR, file), "utf8"), file).toBe(content);
     }
+  });
+
+  it("carry every implementation-only error and the factory's read side from extras.json", () => {
+    const extras = readExtras();
+    const modules = { lane: deskLaneAbi, factory: deskLaneFactoryAbi, fence: priceFenceAbi };
+    for (const section of EXTRAS_SECTIONS) {
+      const have = new Set<string>(
+        modules[section].map((i) => `${i.type}:${"name" in i ? i.name : ""}`),
+      );
+      for (const e of extras[section].filter((i) => i.type === "error"))
+        expect(have.has(`error:${e.name}`), `${section} ${e.name}`).toBe(true);
+    }
+    const factory = new Set<string>(deskLaneFactoryAbi.map((i) => `${i.type}:${i.name}`));
+    for (const item of [
+      "function:listed",
+      "function:pendingImplementation",
+      "function:IMPLEMENTATION_DELAY",
+      "event:LaneListed",
+      "event:ImplementationProposed",
+      "error:LaneExists",
+      "error:ImplementationTimelocked",
+    ])
+      expect(factory.has(item), item).toBe(true);
+    const lane = new Set<string>(deskLaneAbi.map((i) => `${i.type}:${i.name}`));
+    for (const item of [
+      "error:ReentrancyGuardReentrantCall",
+      "error:SafeERC20FailedOperation",
+      "function:lastRerangeAt",
+      "function:poolParams",
+    ])
+      expect(lane.has(item), item).toBe(true);
+  });
+
+  it("never make an extras admin function encodable (applyImplementation, setImplementation)", () => {
+    const extrasFactoryWrites = readExtras()
+      .factory.filter(
+        (i): i is AbiFunction =>
+          i.type === "function" && i.stateMutability !== "view" && i.stateMutability !== "pure",
+      )
+      .map((f) => f.name);
+    expect(extrasFactoryWrites).toContain("applyImplementation");
+    const factoryFns = deskLaneFactoryAbi.filter((i) => i.type === "function");
+    for (const f of factoryFns) expect(["view", "pure"], f.name).toContain(f.stateMutability);
+    for (const name of ["applyImplementation", "setImplementation", "createLane"]) {
+      expect(() =>
+        encodeFunctionData({
+          abi: deskLaneFactoryAbi,
+          functionName: name as never,
+          args: [1] as never,
+        }),
+      ).toThrow();
+    }
+    // The lane's extras are views only: the operator surface is still exactly six selectors.
+    expect(Object.keys(OPERATOR_SELECTORS)).toHaveLength(6);
+  });
+
+  it("refuse an unclassified extras function, an unknown extras section, or a redefined frozen item", () => {
+    const dir = mkdtempSync(join(tmpdir(), "abi-extras-"));
+    try {
+      cpSync(CONTRACTS_ABI_DIR, dir, { recursive: true });
+      const extras = JSON.parse(readFileSync(join(dir, "extras.json"), "utf8")) as Record<
+        string,
+        unknown[]
+      >;
+      const write = (e: unknown) => writeFileSync(join(dir, "extras.json"), JSON.stringify(e));
+      write({
+        ...extras,
+        factory: [
+          ...(extras.factory ?? []),
+          {
+            type: "function",
+            name: "sweep",
+            inputs: [],
+            outputs: [],
+            stateMutability: "nonpayable",
+          },
+        ],
+      });
+      expect(() => renderModules(dir)).toThrow(
+        /"sweep" is neither an operator function nor forbidden/,
+      );
+      write({ ...extras, vault: [] });
+      expect(() => renderModules(dir)).toThrow(/unknown section "vault"/);
+      const { factory: _drop, ...noFactory } = extras;
+      write(noFactory);
+      expect(() => renderModules(dir)).toThrow(/section "factory" is missing/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+    const frozen = [
+      {
+        type: "function",
+        name: "owner",
+        inputs: [],
+        outputs: [{ type: "address" }],
+        stateMutability: "view",
+      },
+    ] as unknown as Abi;
+    expect(mergeExtras(frozen, frozen, "T")).toHaveLength(1); // an exact duplicate is dropped
+    const redefined = [
+      { ...(frozen[0] as object), stateMutability: "nonpayable" },
+    ] as unknown as Abi;
+    expect(() => mergeExtras(frozen, redefined, "T")).toThrow(
+      /redefines the frozen function:owner\(\)/,
+    );
   });
 
   it("refuse to generate when a mutating function is unclassified", () => {

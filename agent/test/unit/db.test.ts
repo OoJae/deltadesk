@@ -119,18 +119,18 @@ afterEach(() => {
 });
 
 describe("schema", () => {
-  it("migrates a fresh database to v3 with WAL on a file", () => {
+  it("migrates a fresh database to v4 with WAL on a file", () => {
     const dir = mkdtempSync(join(tmpdir(), "desk-db-"));
     dirs.push(dir);
     const db = openDb(join(dir, "nested", "desk.sqlite"));
-    expect(db.schemaVersion()).toBe(3);
-    expect(LATEST_SCHEMA_VERSION).toBe(3);
+    expect(db.schemaVersion()).toBe(4);
+    expect(LATEST_SCHEMA_VERSION).toBe(4);
     expect(db.sqlite.pragma("journal_mode", { simple: true })).toBe("wal");
     expect(db.sqlite.pragma("foreign_keys", { simple: true })).toBe(1);
     db.close();
   });
 
-  it("upgrades v1 → v3 without losing rows, and refuses a newer schema", () => {
+  it("upgrades v1 → v4 without losing rows, and refuses a newer schema", () => {
     const dir = mkdtempSync(join(tmpdir(), "desk-db-"));
     dirs.push(dir);
     const path = join(dir, "desk.sqlite");
@@ -138,12 +138,12 @@ describe("schema", () => {
     expect(v1.schemaVersion()).toBe(1);
     v1.insertDecision(decision(ULID_A));
     v1.close();
-    const v3 = openDb(path);
-    expect(v3.schemaVersion()).toBe(3);
-    expect(v3.getDecision(ULID_A)?.status).toBe("executing");
-    v3.close();
+    const v4 = openDb(path);
+    expect(v4.schemaVersion()).toBe(4);
+    expect(v4.getDecision(ULID_A)?.status).toBe("executing");
+    v4.close();
     const raw = new Database(path);
-    raw.pragma("user_version = 4");
+    raw.pragma("user_version = 5");
     raw.close();
     expect(() => openDb(path)).toThrow(/newer than this code/);
   });
@@ -439,8 +439,68 @@ describe("approvals", () => {
       expiresAtMs: T0 + 100,
     });
     expect(db.respondApproval(ULID_B, true, "web", null, T0 + 100)).toBe(false); // expired
-    expect(db.closeApproval(ULID_B, "expired", T0 + 101)?.status).toBe("expired");
+    expect(db.closeApproval(ULID_B, "expired", T0 + 101, "no answer")).toMatchObject({
+      status: "expired",
+      closeReason: "no answer",
+    });
     expect(db.pendingApprovals(LANE, T0 + 1)).toHaveLength(0);
+  });
+
+  it("v3 → v4 keeps approval rows (close_reason starts null)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "desk-db-"));
+    dirs.push(dir);
+    const path = join(dir, "desk.sqlite");
+    const v3 = openDb(path, { migrateTo: 3 });
+    v3.sqlite
+      .prepare(
+        "INSERT INTO approvals (decision_id, lane, summary, requested_at_ms, expires_at_ms, status) VALUES (?, ?, ?, ?, ?, 'pending')",
+      )
+      .run(ULID_A, LANE, "rerange", T0, T0 + 120_000);
+    v3.close();
+    const v4 = openDb(path);
+    expect(v4.getApproval(ULID_A)).toMatchObject({ status: "pending", closeReason: null });
+    v4.close();
+  });
+
+  it("closeOrphanedApprovals: every pending row closes with a reason; its decision is declined", () => {
+    const db = memDb();
+    db.insertDecision(decision(ULID_A, { status: "observed", statusDetail: "awaiting approval" }));
+    db.insertDecision(decision(ULID_B, { status: "observed", statusDetail: "awaiting approval" }));
+    const ULID_C = "01K5HZ3N8QW0000000000000CC";
+    db.insertDecision(decision(ULID_C, { status: "executing" }));
+    for (const [id, expires] of [
+      [ULID_A, T0 + 120_000], // still inside its window at the restart
+      [ULID_B, T0 + 100], // already past it
+      [ULID_C, T0 + 120_000],
+    ] as const)
+      db.createApproval({
+        decisionId: id,
+        laneAddress: LANE,
+        summary: "rerange $50",
+        requestedAtMs: T0,
+        expiresAtMs: expires,
+      });
+    expect(db.respondApproval(ULID_C, true, "web", "0xowner", T0 + 1)).toBe(true); // answered
+    const closed = db.closeOrphanedApprovals("restart", T0 + 1_000);
+    expect(closed.map((a) => [a.decisionId, a.status, a.closeReason])).toEqual([
+      [ULID_A, "cancelled", "restart"],
+      [ULID_B, "expired", "restart"],
+    ]);
+    expect(db.getApproval(ULID_C)?.status).toBe("approved"); // an answered row is left alone
+    expect(db.getDecision(ULID_A)).toMatchObject({
+      status: "declined",
+      approvalOutcome: "cancelled",
+      statusDetail: "approval closed at startup: restart",
+    });
+    expect(db.getDecision(ULID_B)).toMatchObject({
+      status: "declined",
+      approvalOutcome: "timeout",
+    });
+    expect(db.getDecision(ULID_C)?.status).toBe("executing");
+    // Nothing can answer them afterwards, inside the old window or not.
+    expect(db.respondApproval(ULID_A, true, "web", "0xowner", T0 + 2_000)).toBe(false);
+    expect(db.pendingApprovals(LANE, T0 + 2_000)).toEqual([]);
+    expect(db.closeOrphanedApprovals("restart", T0 + 3_000)).toEqual([]);
   });
 });
 

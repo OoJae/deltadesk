@@ -1507,6 +1507,8 @@ export interface LaneActionReconciler {
 }
 
 export interface StartupReport {
+  /** Pending approvals closed because no waiter survived the restart. */
+  approvalsClosed: number;
   failedUnsigned: number;
   rebroadcast: number;
   resolved: number;
@@ -1613,6 +1615,8 @@ export type WatchdogTriggerName =
   | "rerange-cap"
   | "revert-streak"
   | "foreign-action"
+  | "unverified-action"
+  | "unverified-stale"
   | "operator-gas"
   | "dead-man"
   | "telegram-pause";
@@ -1624,6 +1628,8 @@ export interface WatchdogThresholds {
   rerangeHeadroom: number;
   operatorReserveWei: bigint;
   deadManMs: number;
+  /** An operator action unverified this long while the agent is down → pause (once per action). */
+  unverifiedMaxMs: number;
 }
 
 export interface WatchdogInput {
@@ -1638,7 +1644,12 @@ export interface WatchdogInput {
   navMarketMoveUsd: number | null;
   budgets: LaneBudgets | null;
   consecutiveReverts: number;
+  /** Operator LaneActions the agent did not produce (bad decisionId layout, or unknown to its DB). */
   foreignActions: number;
+  /** Operator LaneActions the agent could not be asked about (unreachable, 5xx, not configured). */
+  unverifiedActions: number;
+  /** How long the oldest of them that has not paused the lane yet has waited, ms (null: none). */
+  unverifiedForMs: number | null;
   operatorEthWei: bigint | null;
   agentHealth: HealthView | null;
   /** A scheduled action within ±15 min makes the dead-man switch live. */
@@ -1647,7 +1658,8 @@ export interface WatchdogInput {
 }
 
 export interface WatchdogVerdict {
-  action: "none" | "pause" | "pause_and_exit";
+  /** "alert": a critical alert and no transaction (only alert-only triggers fired). */
+  action: "none" | "alert" | "pause" | "pause_and_exit";
   triggers: Array<{ trigger: WatchdogTriggerName; detail: string }>;
 }
 
@@ -2029,6 +2041,8 @@ export interface ApprovalRow {
   channel: ApprovalChannel | null;
   respondedAtMs: number | null;
   respondedBy: string | null;
+  /** Why it was closed without an answer (expired / cancelled); null while pending or answered. */
+  closeReason: string | null;
 }
 
 export interface ParamCacheRow {
@@ -2103,6 +2117,8 @@ export interface DeskDb {
   getDelegation(walletId: string): DelegationRow | null;
   /** The active delegation for a wallet address (the Operator), if any. */
   getActiveDelegationByAddress(address: Address): DelegationRow | null;
+  /** The most recently updated delegation for a wallet address, active or revoked, if any. */
+  latestDelegationByAddress(address: Address): DelegationRow | null;
   listDelegationsByUser(userId: string): DelegationRow[];
   bindDelegationLane(walletId: string, laneAddress: Address, nowMs: number): void;
   /** delegation.revoked: null every ciphertext and mark revoked. Returns whether a row changed. */
@@ -2243,12 +2259,19 @@ export interface DeskDb {
     respondedBy: string | null,
     nowMs: number,
   ): boolean;
-  /** Pending → expired (or cancelled). Returns the final row. */
+  /** Pending → expired (or cancelled), with an optional reason. Returns the final row. */
   closeApproval(
     decisionId: string,
     status: "expired" | "cancelled",
     nowMs: number,
+    reason?: string,
   ): ApprovalRow | null;
+  /**
+   * Startup: close EVERY pending approval (no in-memory waiter survives a restart, so none may be
+   * answered later): past its window → expired, else cancelled, both with `reason`. The decision
+   * still waiting on it (status observed) becomes declined. Returns the closed rows.
+   */
+  closeOrphanedApprovals(reason: string, nowMs: number): ApprovalRow[];
   pendingApprovals(laneAddress: Address, nowMs: number): ApprovalRow[];
 
   // param cache, cursors, cooldowns

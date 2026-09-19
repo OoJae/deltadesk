@@ -4,7 +4,11 @@
  *   GET  /health               last tick age, daemon lock, pending executions (public: no secrets;
  *                              the watchdog's dead-man switch reads it). Always 200; `ok` says it.
  *   POST /webhooks/dynamic     Dynamic delegated access (http/dynamic-webhook.ts), raw body ≤ 64 KB.
- *   /desks…, /operator-address the web API (http/desks.ts).
+ *   /desks…, /delegations/:operator, /operator-address
+ *                              the web API (http/desks.ts).
+ *   GET  /lanes/:lane/actions/:decisionId
+ *                              the watchdog's cross-check (http/watchdog-api.ts): x-watchdog-key
+ *                              (WATCHDOG_AGENT_KEY) only; 503 while the key is not configured.
  *
  * Unknown routes are 404 JSON; unexpected errors are 500 JSON without stack traces.
  */
@@ -23,6 +27,7 @@ import type {
 } from "../types.js";
 import { createDeskRoutes, type DeskApiDeps } from "./desks.js";
 import { MAX_WEBHOOK_BYTES } from "./dynamic-webhook.js";
+import { createWatchdogRoutes, type WatchdogApiDeps } from "./watchdog-api.js";
 
 export type { HealthView, HttpServerHandle } from "../types.js";
 
@@ -63,6 +68,8 @@ export interface HttpAppDeps {
   health: () => HealthView;
   webhook: WebhookHandler | null;
   desks: DeskApiDeps | null;
+  /** The watchdog's cross-check route; absent (or without a key): 503. */
+  watchdog?: WatchdogApiDeps | undefined;
   logger: DeskLogger;
 }
 
@@ -94,6 +101,15 @@ export function createHttpApp(deps: HttpAppDeps): Hono {
   } else {
     app.all("/desks/*", (c) => c.json({ error: "desk API not configured" }, 503));
     app.post("/desks", (c) => c.json({ error: "desk API not configured" }, 503));
+    app.all("/delegations/*", (c) => c.json({ error: "desk API not configured" }, 503));
+  }
+
+  if (deps.watchdog !== undefined) {
+    app.route("/", createWatchdogRoutes(deps.watchdog));
+  } else {
+    app.all("/lanes/*", (c) =>
+      c.json({ error: "watchdog API not configured (WATCHDOG_AGENT_KEY)" }, 503),
+    );
   }
 
   app.notFound((c) => c.json({ error: "not found" }, 404));

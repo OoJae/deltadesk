@@ -10,10 +10,14 @@
  *                                `DeltaDesk mode <checksummed lane> <mode> <nonce>`; nonce strictly
  *                                increasing. A signed mode change also clears safe mode.
  *   POST /desks/:lane/approve    {decisionId, approve}: copilot answer from the web (bytes32 or ULID).
+ *   GET  /delegations/:operator  has the delegation webhook for this Operator wallet landed yet?
+ *                                {operator (checksummed), status: active | revoked | unknown,
+ *                                walletId, updatedAtMs}. Works BEFORE POST /desks: the wizard polls
+ *                                it between "delegate the Operator" and registering the lane.
  *   GET  /operator-address       the Plan B server-wallet operator, if configured.
  *
  * Every route needs the shared agent key (when configured); all but /operator-address also need a
- * Dynamic JWT whose verified wallets include the lane's owner.
+ * Dynamic JWT whose verified wallets include the lane's owner (/delegations: the operator itself).
  */
 
 import { type Context, Hono } from "hono";
@@ -29,6 +33,7 @@ import type {
   Address,
   ChainClient,
   Clock,
+  DelegationRow,
   DeskDb,
   DeskLogger,
   DeskMode,
@@ -41,7 +46,14 @@ import type {
   SignerKind,
   VerifiedUser,
 } from "../types.js";
-import { AGENT_KEY_HEADER, AuthError, bearerToken, checkAgentKey, requireOwner } from "./auth.js";
+import {
+  AGENT_KEY_HEADER,
+  AuthError,
+  bearerToken,
+  checkAgentKey,
+  requireOwner,
+  requireWallet,
+} from "./auth.js";
 
 export type { DeskMode, DeskRow, DeskStatusView } from "../types.js";
 
@@ -107,6 +119,30 @@ export function deskJson(d: DeskRow): Record<string, unknown> {
     statusDetail: d.statusDetail,
     caps: JSON.parse(d.capsJson) as unknown,
     createdAtMs: d.createdAtMs,
+  };
+}
+
+export type DelegationState = "active" | "revoked" | "unknown";
+
+/** GET /delegations/:operator. Whitelisted fields only: never key material or ciphertexts. */
+export interface DelegationStatusView {
+  operator: string;
+  status: DelegationState;
+  walletId: string | null;
+  updatedAtMs: number | null;
+}
+
+/**
+ * The delegation state of an Operator wallet. "unknown": no row yet (the webhook has not landed,
+ * or it was refused, e.g. for a lane owner). "revoked": a Dynamic revoke (recorded sticky per
+ * event, so an older created event can never re-activate the row) or a local purge.
+ */
+export function delegationView(operator: Address, row: DelegationRow | null): DelegationStatusView {
+  return {
+    operator: getAddress(operator),
+    status: row === null ? "unknown" : row.status,
+    walletId: row?.walletId ?? null,
+    updatedAtMs: row?.updatedAtMs ?? null,
   };
 }
 
@@ -209,7 +245,7 @@ export function createDeskRoutes(deps: DeskApiDeps): Hono {
 
   // Scoped to this API's paths: mounted at "/", a "*" middleware would also cover /health and
   // the webhook.
-  for (const path of ["/desks", "/desks/*", "/operator-address"]) {
+  for (const path of ["/desks", "/desks/*", "/delegations/*", "/operator-address"]) {
     app.use(
       path,
       bodyLimit({ maxSize: 16 * 1024, onError: (c) => c.json({ error: "body too large" }, 413) }),
@@ -422,6 +458,24 @@ export function createDeskRoutes(deps: DeskApiDeps): Hono {
     }
     logger.info({ lane, decisionId: ulid, approve: body.approve }, "web approval answer");
     return c.json({ decisionId: ulid, approved: body.approve });
+  });
+
+  app.get("/delegations/:operator", async (c) => {
+    const raw = c.req.param("operator") ?? "";
+    if (!isAddress(raw, { strict: false })) throw new HttpError(400, "operator must be an address");
+    const operator = lower(raw);
+    const u = await user(c);
+    // The same binding as POST /desks, before any desk exists: the caller must hold the operator
+    // wallet, and a delegation row (if any) must be this user's.
+    requireWallet(
+      u,
+      operator,
+      "the signed-in user's verified wallets do not include this operator",
+    );
+    const row = db.getActiveDelegationByAddress(operator) ?? db.latestDelegationByAddress(operator);
+    if (row !== null && row.userId !== u.userId)
+      throw new HttpError(403, "the operator was delegated by another user");
+    return c.json(delegationView(operator, row));
   });
 
   app.get("/operator-address", (c) => {

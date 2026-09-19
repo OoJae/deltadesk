@@ -305,14 +305,64 @@ describe("watchdog config", () => {
     expect(() => loadWatchdogConfig({ WATCHDOG_DRY_RUN: "false", WATCHDOG_ARM: "1" })).toThrow(
       /GUARDIAN_PRIVATE_KEY/,
     );
-    const cfg = loadWatchdogConfig({
+    const live = {
       WATCHDOG_DRY_RUN: "false",
       WATCHDOG_ARM: "1",
       WATCHDOG_GUARDIAN_PRIVATE_KEY: ANVIL_KEY_0,
       DESK_LANE_A: OPERATOR,
+    };
+    // Live without the agent: every operator action unverifiable, and /health reads as down.
+    expect(() => loadWatchdogConfig(live)).toThrow(/requires WATCHDOG_AGENT_URL/);
+    const cfg = loadWatchdogConfig({
+      ...live,
+      WATCHDOG_AGENT_URL: "http://desk-agent:8080",
+      WATCHDOG_AGENT_KEY: "a".repeat(32),
     });
     expect(cfg.lanes).toEqual([OPERATOR]);
     expect(cfg.thresholds.deadManMs).toBe(15 * 60_000);
+    expect(cfg.thresholds.unverifiedMaxMs).toBe(15 * 60_000);
+    expect(loadWatchdogConfig({ WATCHDOG_UNVERIFIED_MIN: "5" }).thresholds.unverifiedMaxMs).toBe(
+      5 * 60_000,
+    );
+    expect(() => loadWatchdogConfig({ WATCHDOG_UNVERIFIED_MIN: "0" })).toThrow(ConfigRefusedError);
+  });
+});
+
+describe("WATCHDOG_AGENT_KEY: the watchdog's own shared secret for the cross-check route", () => {
+  const KEY = "a".repeat(16) + "b".repeat(16);
+
+  it("agent: unset leaves the route off; short, padded or equal to the web's key is refused", () => {
+    expect(loadConfig({}).http.watchdogKey).toBeUndefined();
+    expect(loadConfig({ WATCHDOG_AGENT_KEY: "" }).http.watchdogKey).toBeUndefined();
+    expect(loadConfig({ WATCHDOG_AGENT_KEY: KEY }).http.watchdogKey).toBe(KEY);
+    expect(() => loadConfig({ WATCHDOG_AGENT_KEY: "short-key-0123456789" })).toThrow(
+      /WATCHDOG_AGENT_KEY must be at least 32 characters/,
+    );
+    expect(() => loadConfig({ WATCHDOG_AGENT_KEY: ` ${KEY}` })).toThrow(/surrounding whitespace/);
+    expect(() => loadConfig({ WATCHDOG_AGENT_KEY: KEY, DESK_AGENT_API_KEY: KEY })).toThrow(
+      /WATCHDOG_AGENT_KEY equals DESK_AGENT_API_KEY/,
+    );
+  });
+
+  it("watchdog: an agent URL needs the key; a short key is refused", () => {
+    expect(() => loadWatchdogConfig({ WATCHDOG_AGENT_URL: "http://desk-agent:8080" })).toThrow(
+      /WATCHDOG_AGENT_URL requires WATCHDOG_AGENT_KEY/,
+    );
+    expect(() =>
+      loadWatchdogConfig({
+        WATCHDOG_AGENT_URL: "http://desk-agent:8080",
+        WATCHDOG_AGENT_KEY: "",
+      }),
+    ).toThrow(/requires WATCHDOG_AGENT_KEY/);
+    expect(() =>
+      loadWatchdogConfig({ WATCHDOG_AGENT_URL: "http://desk-agent:8080", WATCHDOG_AGENT_KEY: "x" }),
+    ).toThrow(/at least 32 characters/);
+    const cfg = loadWatchdogConfig({
+      WATCHDOG_AGENT_URL: "http://desk-agent:8080",
+      WATCHDOG_AGENT_KEY: KEY,
+    });
+    expect(cfg).toMatchObject({ agentUrl: "http://desk-agent:8080", agentKey: KEY });
+    expect(loadWatchdogConfig({}).agentKey).toBeUndefined();
   });
 });
 

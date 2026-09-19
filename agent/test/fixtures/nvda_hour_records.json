@@ -1,0 +1,1525 @@
+{
+ "source": "engine hour_record(): data/study/m1/hl_ref/by_how.parquet, pool NVDA/USDG (the record GET /safe-to-lp serves as `current_hour`)",
+ "generated": "2026-09-19",
+ "sample": {
+  "t_first": 1784632485.0,
+  "t_last": 1789767444.0,
+  "first_utc": "2026-07-21T11:14:45Z",
+  "last_utc": "2026-09-18T21:37:24Z",
+  "weeks": 8.49
+ },
+ "records": [
+  {
+   "how": 0,
+   "swaps": 21201,
+   "fees_usd": 1531.722531,
+   "picked_1h_usd": 471.998102,
+   "edge_1h": 3.245188,
+   "lp_net_bps_1h": 2.611024,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 1,
+   "swaps": 10073,
+   "fees_usd": 1132.326652,
+   "picked_1h_usd": 1308.521618,
+   "edge_1h": 0.865348,
+   "lp_net_bps_1h": -0.593069,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 2,
+   "swaps": 15321,
+   "fees_usd": 1331.24472,
+   "picked_1h_usd": 1135.679156,
+   "edge_1h": 1.172201,
+   "lp_net_bps_1h": 0.560172,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 3,
+   "swaps": 14864,
+   "fees_usd": 1135.71779,
+   "picked_1h_usd": 1191.154694,
+   "edge_1h": 0.95346,
+   "lp_net_bps_1h": -0.184683,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 4,
+   "swaps": 11019,
+   "fees_usd": 2090.452289,
+   "picked_1h_usd": 3828.712948,
+   "edge_1h": 0.545993,
+   "lp_net_bps_1h": -3.12232,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 5,
+   "swaps": 6410,
+   "fees_usd": 1104.102591,
+   "picked_1h_usd": 842.199379,
+   "edge_1h": 1.310975,
+   "lp_net_bps_1h": 0.889534,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 6,
+   "swaps": 13161,
+   "fees_usd": 1499.626395,
+   "picked_1h_usd": 433.112731,
+   "edge_1h": 3.462439,
+   "lp_net_bps_1h": 2.666948,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 7,
+   "swaps": 13022,
+   "fees_usd": 1502.842365,
+   "picked_1h_usd": 998.160377,
+   "edge_1h": 1.505612,
+   "lp_net_bps_1h": 1.259319,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 8,
+   "swaps": 23205,
+   "fees_usd": 2150.057942,
+   "picked_1h_usd": 1034.209285,
+   "edge_1h": 2.078939,
+   "lp_net_bps_1h": 1.946195,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 9,
+   "swaps": 27184,
+   "fees_usd": 6164.694551,
+   "picked_1h_usd": 24654.626873,
+   "edge_1h": 0.250042,
+   "lp_net_bps_1h": -11.247475,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 10,
+   "swaps": 23162,
+   "fees_usd": 3876.844943,
+   "picked_1h_usd": 2091.514722,
+   "edge_1h": 1.853606,
+   "lp_net_bps_1h": 1.726917,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 11,
+   "swaps": 51495,
+   "fees_usd": 4852.831652,
+   "picked_1h_usd": 3207.120113,
+   "edge_1h": 1.513143,
+   "lp_net_bps_1h": 1.271715,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 12,
+   "swaps": 28372,
+   "fees_usd": 2775.668983,
+   "picked_1h_usd": 476.134963,
+   "edge_1h": 5.829584,
+   "lp_net_bps_1h": 3.106729,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 13,
+   "swaps": 25255,
+   "fees_usd": 2159.38598,
+   "picked_1h_usd": 541.406957,
+   "edge_1h": 3.988471,
+   "lp_net_bps_1h": 2.80979,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 14,
+   "swaps": 12193,
+   "fees_usd": 1755.191279,
+   "picked_1h_usd": -382.641317,
+   "edge_1h": null,
+   "lp_net_bps_1h": 4.567521,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 15,
+   "swaps": 11863,
+   "fees_usd": 2027.443722,
+   "picked_1h_usd": 2004.265796,
+   "edge_1h": 1.011564,
+   "lp_net_bps_1h": 0.04287,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 16,
+   "swaps": 6900,
+   "fees_usd": 1319.603517,
+   "picked_1h_usd": 1445.143602,
+   "edge_1h": 0.91313,
+   "lp_net_bps_1h": -0.356755,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 17,
+   "swaps": 8979,
+   "fees_usd": 783.418206,
+   "picked_1h_usd": -54.767687,
+   "edge_1h": null,
+   "lp_net_bps_1h": 4.012157,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 18,
+   "swaps": 9983,
+   "fees_usd": 946.599749,
+   "picked_1h_usd": 1259.007693,
+   "edge_1h": 0.751862,
+   "lp_net_bps_1h": -1.237619,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 19,
+   "swaps": 13005,
+   "fees_usd": 903.195498,
+   "picked_1h_usd": 103.855848,
+   "edge_1h": 8.696626,
+   "lp_net_bps_1h": 3.318798,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 20,
+   "swaps": 25948,
+   "fees_usd": 2682.22221,
+   "picked_1h_usd": 494.990856,
+   "edge_1h": 5.418731,
+   "lp_net_bps_1h": 3.057956,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 21,
+   "swaps": 8572,
+   "fees_usd": 1516.999433,
+   "picked_1h_usd": 641.988799,
+   "edge_1h": 2.362969,
+   "lp_net_bps_1h": 2.163013,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 22,
+   "swaps": 13008,
+   "fees_usd": 1396.554041,
+   "picked_1h_usd": 45.643943,
+   "edge_1h": 30.5967,
+   "lp_net_bps_1h": 3.627438,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 23,
+   "swaps": 11408,
+   "fees_usd": 1555.433413,
+   "picked_1h_usd": 479.088615,
+   "edge_1h": 3.246651,
+   "lp_net_bps_1h": 2.594964,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 24,
+   "swaps": 5719,
+   "fees_usd": 1152.123365,
+   "picked_1h_usd": 851.745909,
+   "edge_1h": 1.352661,
+   "lp_net_bps_1h": 0.977687,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 25,
+   "swaps": 8738,
+   "fees_usd": 1229.997359,
+   "picked_1h_usd": 1667.602531,
+   "edge_1h": 0.737584,
+   "lp_net_bps_1h": -1.334165,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 26,
+   "swaps": 7160,
+   "fees_usd": 1396.063575,
+   "picked_1h_usd": 493.684623,
+   "edge_1h": 2.827845,
+   "lp_net_bps_1h": 2.423902,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 27,
+   "swaps": 5604,
+   "fees_usd": 917.193142,
+   "picked_1h_usd": 1596.954621,
+   "edge_1h": 0.574339,
+   "lp_net_bps_1h": -2.779246,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 28,
+   "swaps": 18950,
+   "fees_usd": 2752.612541,
+   "picked_1h_usd": 4037.539172,
+   "edge_1h": 0.681755,
+   "lp_net_bps_1h": -1.75051,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 29,
+   "swaps": 11239,
+   "fees_usd": 1756.781295,
+   "picked_1h_usd": 1213.026117,
+   "edge_1h": 1.448263,
+   "lp_net_bps_1h": 1.160692,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 30,
+   "swaps": 13143,
+   "fees_usd": 1715.813657,
+   "picked_1h_usd": 1192.65561,
+   "edge_1h": 1.43865,
+   "lp_net_bps_1h": 1.143389,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 31,
+   "swaps": 21401,
+   "fees_usd": 2455.283905,
+   "picked_1h_usd": 1848.049657,
+   "edge_1h": 1.328581,
+   "lp_net_bps_1h": 0.927988,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 32,
+   "swaps": 18716,
+   "fees_usd": 2429.073046,
+   "picked_1h_usd": 1640.818969,
+   "edge_1h": 1.480403,
+   "lp_net_bps_1h": 1.217711,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 33,
+   "swaps": 34917,
+   "fees_usd": 8061.910129,
+   "picked_1h_usd": 9866.979425,
+   "edge_1h": 0.81706,
+   "lp_net_bps_1h": -0.839698,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 34,
+   "swaps": 19767,
+   "fees_usd": 5165.656185,
+   "picked_1h_usd": 10446.336546,
+   "edge_1h": 0.494495,
+   "lp_net_bps_1h": -3.833519,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 35,
+   "swaps": 15851,
+   "fees_usd": 3878.147442,
+   "picked_1h_usd": 4898.418386,
+   "edge_1h": 0.791714,
+   "lp_net_bps_1h": -0.986565,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 36,
+   "swaps": 25692,
+   "fees_usd": 3297.175371,
+   "picked_1h_usd": 885.922053,
+   "edge_1h": 3.721744,
+   "lp_net_bps_1h": 2.742437,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 37,
+   "swaps": 13505,
+   "fees_usd": 1946.938308,
+   "picked_1h_usd": 2638.036202,
+   "edge_1h": 0.738026,
+   "lp_net_bps_1h": -1.331142,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 38,
+   "swaps": 21682,
+   "fees_usd": 3091.541686,
+   "picked_1h_usd": -101.675894,
+   "edge_1h": null,
+   "lp_net_bps_1h": 3.879579,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 39,
+   "swaps": 17085,
+   "fees_usd": 2886.93527,
+   "picked_1h_usd": 431.661281,
+   "edge_1h": 6.687964,
+   "lp_net_bps_1h": 3.222192,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 40,
+   "swaps": 16798,
+   "fees_usd": 2759.585449,
+   "picked_1h_usd": 337.429282,
+   "edge_1h": 8.178263,
+   "lp_net_bps_1h": 3.302742,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 41,
+   "swaps": 15251,
+   "fees_usd": 1980.323892,
+   "picked_1h_usd": 252.389296,
+   "edge_1h": 7.846307,
+   "lp_net_bps_1h": 3.300734,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 42,
+   "swaps": 11742,
+   "fees_usd": 1343.892549,
+   "picked_1h_usd": 10.250471,
+   "edge_1h": 131.105448,
+   "lp_net_bps_1h": 3.748869,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 43,
+   "swaps": 13149,
+   "fees_usd": 1578.496113,
+   "picked_1h_usd": 896.276802,
+   "edge_1h": 1.76117,
+   "lp_net_bps_1h": 1.626295,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 44,
+   "swaps": 7050,
+   "fees_usd": 1322.096042,
+   "picked_1h_usd": 1096.131557,
+   "edge_1h": 1.206147,
+   "lp_net_bps_1h": 0.64582,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 45,
+   "swaps": 8883,
+   "fees_usd": 1671.217386,
+   "picked_1h_usd": 407.210015,
+   "edge_1h": 4.104067,
+   "lp_net_bps_1h": 2.849175,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 46,
+   "swaps": 14336,
+   "fees_usd": 1709.307658,
+   "picked_1h_usd": 1360.505031,
+   "edge_1h": 1.256377,
+   "lp_net_bps_1h": 0.768823,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 47,
+   "swaps": 9339,
+   "fees_usd": 1271.783042,
+   "picked_1h_usd": 920.44642,
+   "edge_1h": 1.381702,
+   "lp_net_bps_1h": 1.041199,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 48,
+   "swaps": 9882,
+   "fees_usd": 1029.988795,
+   "picked_1h_usd": 227.575068,
+   "edge_1h": 4.52593,
+   "lp_net_bps_1h": 2.936068,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 49,
+   "swaps": 13815,
+   "fees_usd": 1295.011134,
+   "picked_1h_usd": -163.528991,
+   "edge_1h": null,
+   "lp_net_bps_1h": 4.246704,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 50,
+   "swaps": 20898,
+   "fees_usd": 1821.530845,
+   "picked_1h_usd": 564.578083,
+   "edge_1h": 3.226358,
+   "lp_net_bps_1h": 2.593462,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 51,
+   "swaps": 17690,
+   "fees_usd": 1972.979716,
+   "picked_1h_usd": 284.911756,
+   "edge_1h": 6.92488,
+   "lp_net_bps_1h": 3.213497,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 52,
+   "swaps": 19016,
+   "fees_usd": 2003.474793,
+   "picked_1h_usd": 1344.137276,
+   "edge_1h": 1.490528,
+   "lp_net_bps_1h": 1.246491,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 53,
+   "swaps": 13394,
+   "fees_usd": 1666.444879,
+   "picked_1h_usd": 3013.600423,
+   "edge_1h": 0.552975,
+   "lp_net_bps_1h": -3.036942,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 54,
+   "swaps": 19867,
+   "fees_usd": 2015.007564,
+   "picked_1h_usd": 93.650737,
+   "edge_1h": 21.516195,
+   "lp_net_bps_1h": 3.590028,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 55,
+   "swaps": 15012,
+   "fees_usd": 1924.958031,
+   "picked_1h_usd": 1613.309333,
+   "edge_1h": 1.193174,
+   "lp_net_bps_1h": 0.611927,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 56,
+   "swaps": 11930,
+   "fees_usd": 2440.745095,
+   "picked_1h_usd": 19.944336,
+   "edge_1h": 122.377856,
+   "lp_net_bps_1h": 3.745253,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 57,
+   "swaps": 29213,
+   "fees_usd": 8842.995933,
+   "picked_1h_usd": 26756.071073,
+   "edge_1h": 0.330504,
+   "lp_net_bps_1h": -7.636817,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 58,
+   "swaps": 19376,
+   "fees_usd": 4864.959773,
+   "picked_1h_usd": 10203.883066,
+   "edge_1h": 0.476775,
+   "lp_net_bps_1h": -4.146141,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 59,
+   "swaps": 21695,
+   "fees_usd": 3609.160956,
+   "picked_1h_usd": 5161.448065,
+   "edge_1h": 0.699254,
+   "lp_net_bps_1h": -1.677873,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 60,
+   "swaps": 25860,
+   "fees_usd": 2929.399292,
+   "picked_1h_usd": 2119.641585,
+   "edge_1h": 1.382026,
+   "lp_net_bps_1h": 1.090279,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 61,
+   "swaps": 18011,
+   "fees_usd": 2095.420671,
+   "picked_1h_usd": 584.685972,
+   "edge_1h": 3.583839,
+   "lp_net_bps_1h": 2.794172,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 62,
+   "swaps": 16427,
+   "fees_usd": 3398.094831,
+   "picked_1h_usd": 1461.717119,
+   "edge_1h": 2.324728,
+   "lp_net_bps_1h": 2.171521,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 63,
+   "swaps": 16895,
+   "fees_usd": 4091.704289,
+   "picked_1h_usd": 7195.156395,
+   "edge_1h": 0.568675,
+   "lp_net_bps_1h": -2.899986,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 64,
+   "swaps": 16956,
+   "fees_usd": 4755.005008,
+   "picked_1h_usd": -420.689371,
+   "edge_1h": null,
+   "lp_net_bps_1h": 4.106887,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 65,
+   "swaps": 22594,
+   "fees_usd": 5547.448004,
+   "picked_1h_usd": 21534.600176,
+   "edge_1h": 0.257606,
+   "lp_net_bps_1h": -10.953691,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 66,
+   "swaps": 18103,
+   "fees_usd": 2232.041205,
+   "picked_1h_usd": 172.01665,
+   "edge_1h": 12.975728,
+   "lp_net_bps_1h": 3.532768,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 67,
+   "swaps": 9055,
+   "fees_usd": 1219.048972,
+   "picked_1h_usd": 304.303892,
+   "edge_1h": 4.006025,
+   "lp_net_bps_1h": 2.897818,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 68,
+   "swaps": 16746,
+   "fees_usd": 2240.233765,
+   "picked_1h_usd": 625.186603,
+   "edge_1h": 3.583304,
+   "lp_net_bps_1h": 2.773997,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 69,
+   "swaps": 16380,
+   "fees_usd": 2298.727576,
+   "picked_1h_usd": 1746.577499,
+   "edge_1h": 1.316133,
+   "lp_net_bps_1h": 0.943298,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 70,
+   "swaps": 18946,
+   "fees_usd": 1967.027291,
+   "picked_1h_usd": 357.037369,
+   "edge_1h": 5.509304,
+   "lp_net_bps_1h": 3.30753,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 71,
+   "swaps": 14007,
+   "fees_usd": 1301.353518,
+   "picked_1h_usd": 440.301436,
+   "edge_1h": 2.955597,
+   "lp_net_bps_1h": 2.537597,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 72,
+   "swaps": 13603,
+   "fees_usd": 1382.303816,
+   "picked_1h_usd": -65.803149,
+   "edge_1h": null,
+   "lp_net_bps_1h": 3.980571,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 73,
+   "swaps": 5625,
+   "fees_usd": 1153.438204,
+   "picked_1h_usd": 27.116064,
+   "edge_1h": 42.53708,
+   "lp_net_bps_1h": 3.904658,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 74,
+   "swaps": 10900,
+   "fees_usd": 1542.29456,
+   "picked_1h_usd": 1087.254523,
+   "edge_1h": 1.418522,
+   "lp_net_bps_1h": 1.172775,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 75,
+   "swaps": 10789,
+   "fees_usd": 1651.701393,
+   "picked_1h_usd": 1887.54799,
+   "edge_1h": 0.875051,
+   "lp_net_bps_1h": -0.558284,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 76,
+   "swaps": 10454,
+   "fees_usd": 2536.724606,
+   "picked_1h_usd": 3231.009253,
+   "edge_1h": 0.785118,
+   "lp_net_bps_1h": -1.039838,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 77,
+   "swaps": 13384,
+   "fees_usd": 1716.578045,
+   "picked_1h_usd": 493.862176,
+   "edge_1h": 3.475824,
+   "lp_net_bps_1h": 2.77417,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 78,
+   "swaps": 10915,
+   "fees_usd": 1409.828767,
+   "picked_1h_usd": 752.867461,
+   "edge_1h": 1.872612,
+   "lp_net_bps_1h": 1.815821,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 79,
+   "swaps": 21412,
+   "fees_usd": 2536.417957,
+   "picked_1h_usd": 2855.101282,
+   "edge_1h": 0.888381,
+   "lp_net_bps_1h": -0.479098,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 80,
+   "swaps": 88967,
+   "fees_usd": 7340.647991,
+   "picked_1h_usd": 14296.070882,
+   "edge_1h": 0.513473,
+   "lp_net_bps_1h": -3.579433,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 81,
+   "swaps": 93241,
+   "fees_usd": 13272.322861,
+   "picked_1h_usd": 4953.039143,
+   "edge_1h": 2.679632,
+   "lp_net_bps_1h": 2.365922,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 82,
+   "swaps": 86338,
+   "fees_usd": 9227.117061,
+   "picked_1h_usd": 2896.51823,
+   "edge_1h": 3.185589,
+   "lp_net_bps_1h": 2.591299,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 83,
+   "swaps": 85716,
+   "fees_usd": 7673.603365,
+   "picked_1h_usd": 2191.049301,
+   "edge_1h": 3.50225,
+   "lp_net_bps_1h": 2.712211,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 84,
+   "swaps": 39672,
+   "fees_usd": 4204.475688,
+   "picked_1h_usd": 1308.360782,
+   "edge_1h": 3.213545,
+   "lp_net_bps_1h": 2.624533,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 85,
+   "swaps": 32658,
+   "fees_usd": 3528.200346,
+   "picked_1h_usd": 5192.679545,
+   "edge_1h": 0.679457,
+   "lp_net_bps_1h": -1.833703,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 86,
+   "swaps": 23765,
+   "fees_usd": 2655.060963,
+   "picked_1h_usd": 1798.437385,
+   "edge_1h": 1.476315,
+   "lp_net_bps_1h": 1.224652,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 87,
+   "swaps": 13823,
+   "fees_usd": 2775.545059,
+   "picked_1h_usd": 720.130006,
+   "edge_1h": 3.854228,
+   "lp_net_bps_1h": 2.827345,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 88,
+   "swaps": 18672,
+   "fees_usd": 1720.945858,
+   "picked_1h_usd": 651.851938,
+   "edge_1h": 2.640087,
+   "lp_net_bps_1h": 2.365275,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 89,
+   "swaps": 10959,
+   "fees_usd": 2023.246285,
+   "picked_1h_usd": 449.892757,
+   "edge_1h": 4.497175,
+   "lp_net_bps_1h": 2.949385,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 90,
+   "swaps": 21667,
+   "fees_usd": 1575.034924,
+   "picked_1h_usd": 447.503969,
+   "edge_1h": 3.5196,
+   "lp_net_bps_1h": 2.710805,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 91,
+   "swaps": 15699,
+   "fees_usd": 1392.586726,
+   "picked_1h_usd": 306.702307,
+   "edge_1h": 4.540516,
+   "lp_net_bps_1h": 3.01515,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 92,
+   "swaps": 11307,
+   "fees_usd": 1306.694333,
+   "picked_1h_usd": 772.911837,
+   "edge_1h": 1.690612,
+   "lp_net_bps_1h": 1.557642,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 93,
+   "swaps": 15755,
+   "fees_usd": 1587.626028,
+   "picked_1h_usd": 311.83902,
+   "edge_1h": 5.091172,
+   "lp_net_bps_1h": 3.031008,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 94,
+   "swaps": 10555,
+   "fees_usd": 1469.318743,
+   "picked_1h_usd": 1117.842491,
+   "edge_1h": 1.314424,
+   "lp_net_bps_1h": 0.912472,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 95,
+   "swaps": 10861,
+   "fees_usd": 1692.124226,
+   "picked_1h_usd": 237.953237,
+   "edge_1h": 7.111163,
+   "lp_net_bps_1h": 3.280484,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 96,
+   "swaps": 6686,
+   "fees_usd": 2079.20195,
+   "picked_1h_usd": 709.635333,
+   "edge_1h": 2.929958,
+   "lp_net_bps_1h": 2.487154,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 97,
+   "swaps": 7862,
+   "fees_usd": 1141.127087,
+   "picked_1h_usd": 914.729427,
+   "edge_1h": 1.247502,
+   "lp_net_bps_1h": 0.756898,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 98,
+   "swaps": 10754,
+   "fees_usd": 1117.069078,
+   "picked_1h_usd": 626.22994,
+   "edge_1h": 1.7838,
+   "lp_net_bps_1h": 1.664816,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 99,
+   "swaps": 14125,
+   "fees_usd": 1487.94604,
+   "picked_1h_usd": 1373.224512,
+   "edge_1h": 1.083542,
+   "lp_net_bps_1h": 0.291061,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 100,
+   "swaps": 17194,
+   "fees_usd": 2260.721009,
+   "picked_1h_usd": 1423.988968,
+   "edge_1h": 1.587597,
+   "lp_net_bps_1h": 1.396402,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 101,
+   "swaps": 13251,
+   "fees_usd": 2101.701598,
+   "picked_1h_usd": 1477.556302,
+   "edge_1h": 1.422417,
+   "lp_net_bps_1h": 1.120148,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 102,
+   "swaps": 11521,
+   "fees_usd": 1259.229293,
+   "picked_1h_usd": 1089.119664,
+   "edge_1h": 1.15619,
+   "lp_net_bps_1h": 0.513339,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 103,
+   "swaps": 11768,
+   "fees_usd": 1562.293435,
+   "picked_1h_usd": 938.770471,
+   "edge_1h": 1.664191,
+   "lp_net_bps_1h": 1.531046,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 104,
+   "swaps": 20454,
+   "fees_usd": 3372.755745,
+   "picked_1h_usd": -1833.854323,
+   "edge_1h": null,
+   "lp_net_bps_1h": 5.929169,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 105,
+   "swaps": 58122,
+   "fees_usd": 9704.548063,
+   "picked_1h_usd": 9453.573758,
+   "edge_1h": 1.026548,
+   "lp_net_bps_1h": 0.101868,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 106,
+   "swaps": 55569,
+   "fees_usd": 8216.230387,
+   "picked_1h_usd": -4762.003184,
+   "edge_1h": null,
+   "lp_net_bps_1h": 6.25785,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 107,
+   "swaps": 50894,
+   "fees_usd": 6168.235439,
+   "picked_1h_usd": 18175.698225,
+   "edge_1h": 0.339367,
+   "lp_net_bps_1h": -7.700176,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 108,
+   "swaps": 23956,
+   "fees_usd": 3304.642463,
+   "picked_1h_usd": 2509.048859,
+   "edge_1h": 1.31709,
+   "lp_net_bps_1h": 0.930713,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 109,
+   "swaps": 18371,
+   "fees_usd": 2633.130429,
+   "picked_1h_usd": 873.359569,
+   "edge_1h": 3.014944,
+   "lp_net_bps_1h": 2.57523,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 110,
+   "swaps": 13450,
+   "fees_usd": 2035.49547,
+   "picked_1h_usd": 5107.827323,
+   "edge_1h": 0.398505,
+   "lp_net_bps_1h": -5.836023,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 111,
+   "swaps": 23386,
+   "fees_usd": 3830.39231,
+   "picked_1h_usd": 5317.423043,
+   "edge_1h": 0.720347,
+   "lp_net_bps_1h": -1.502836,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 112,
+   "swaps": 13917,
+   "fees_usd": 1297.301163,
+   "picked_1h_usd": -187.918402,
+   "edge_1h": null,
+   "lp_net_bps_1h": 4.423832,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 113,
+   "swaps": 22633,
+   "fees_usd": 1591.303581,
+   "picked_1h_usd": 72.105896,
+   "edge_1h": 22.06898,
+   "lp_net_bps_1h": 3.615776,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 114,
+   "swaps": 17702,
+   "fees_usd": 1478.832062,
+   "picked_1h_usd": 33.102997,
+   "edge_1h": 44.67366,
+   "lp_net_bps_1h": 3.74024,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 115,
+   "swaps": 11310,
+   "fees_usd": 831.302522,
+   "picked_1h_usd": -19.700537,
+   "edge_1h": null,
+   "lp_net_bps_1h": 3.977514,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 116,
+   "swaps": 9196,
+   "fees_usd": 833.917076,
+   "picked_1h_usd": 274.067493,
+   "edge_1h": 3.042743,
+   "lp_net_bps_1h": 2.632687,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 117,
+   "swaps": 25954,
+   "fees_usd": 1660.316197,
+   "picked_1h_usd": 119.219649,
+   "edge_1h": 13.926531,
+   "lp_net_bps_1h": 3.537997,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 118,
+   "swaps": 12784,
+   "fees_usd": 1085.223137,
+   "picked_1h_usd": 395.600342,
+   "edge_1h": 2.743231,
+   "lp_net_bps_1h": 2.476845,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 119,
+   "swaps": 16573,
+   "fees_usd": 1243.863788,
+   "picked_1h_usd": 92.7551,
+   "edge_1h": 13.410193,
+   "lp_net_bps_1h": 3.528641,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 120,
+   "swaps": 9472,
+   "fees_usd": 724.895001,
+   "picked_1h_usd": 152.396684,
+   "edge_1h": 4.756632,
+   "lp_net_bps_1h": 3.031602,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 121,
+   "swaps": 9311,
+   "fees_usd": 660.853977,
+   "picked_1h_usd": 125.988964,
+   "edge_1h": 5.245332,
+   "lp_net_bps_1h": 3.089219,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 122,
+   "swaps": 8438,
+   "fees_usd": 661.299919,
+   "picked_1h_usd": 61.566117,
+   "edge_1h": 10.741296,
+   "lp_net_bps_1h": 3.465931,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 123,
+   "swaps": 6493,
+   "fees_usd": 480.015536,
+   "picked_1h_usd": 74.245989,
+   "edge_1h": 6.465205,
+   "lp_net_bps_1h": 3.263511,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 124,
+   "swaps": 6058,
+   "fees_usd": 790.029596,
+   "picked_1h_usd": 36.549591,
+   "edge_1h": 21.615279,
+   "lp_net_bps_1h": 3.628769,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 125,
+   "swaps": 12324,
+   "fees_usd": 854.172047,
+   "picked_1h_usd": -10.191637,
+   "edge_1h": null,
+   "lp_net_bps_1h": 3.841075,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 126,
+   "swaps": 12874,
+   "fees_usd": 732.098016,
+   "picked_1h_usd": 48.125159,
+   "edge_1h": 15.212376,
+   "lp_net_bps_1h": 3.611042,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 127,
+   "swaps": 33088,
+   "fees_usd": 1823.694909,
+   "picked_1h_usd": 49.056194,
+   "edge_1h": 37.17563,
+   "lp_net_bps_1h": 3.941234,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 128,
+   "swaps": 22816,
+   "fees_usd": 1273.671431,
+   "picked_1h_usd": 1.443048,
+   "edge_1h": 882.62592,
+   "lp_net_bps_1h": 3.932636,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 129,
+   "swaps": 28651,
+   "fees_usd": 1550.076002,
+   "picked_1h_usd": -1.542422,
+   "edge_1h": null,
+   "lp_net_bps_1h": 3.804,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 130,
+   "swaps": 31783,
+   "fees_usd": 1871.12096,
+   "picked_1h_usd": -92.666597,
+   "edge_1h": null,
+   "lp_net_bps_1h": 4.029869,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 131,
+   "swaps": 19867,
+   "fees_usd": 1581.973464,
+   "picked_1h_usd": -38.07213,
+   "edge_1h": null,
+   "lp_net_bps_1h": 3.938169,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 132,
+   "swaps": 14761,
+   "fees_usd": 1172.682048,
+   "picked_1h_usd": -142.641892,
+   "edge_1h": null,
+   "lp_net_bps_1h": 4.318172,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 133,
+   "swaps": 16803,
+   "fees_usd": 1021.256593,
+   "picked_1h_usd": -39.217484,
+   "edge_1h": null,
+   "lp_net_bps_1h": 4.022385,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 134,
+   "swaps": 17699,
+   "fees_usd": 1050.699423,
+   "picked_1h_usd": 268.06726,
+   "edge_1h": 3.919537,
+   "lp_net_bps_1h": 2.865012,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 135,
+   "swaps": 14060,
+   "fees_usd": 1367.266609,
+   "picked_1h_usd": 639.915802,
+   "edge_1h": 2.136635,
+   "lp_net_bps_1h": 2.060232,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 136,
+   "swaps": 9893,
+   "fees_usd": 932.759882,
+   "picked_1h_usd": 1140.189715,
+   "edge_1h": 0.818074,
+   "lp_net_bps_1h": -0.855635,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 137,
+   "swaps": 9659,
+   "fees_usd": 750.331573,
+   "picked_1h_usd": 26.795572,
+   "edge_1h": 28.002074,
+   "lp_net_bps_1h": 3.875013,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 138,
+   "swaps": 14009,
+   "fees_usd": 823.083251,
+   "picked_1h_usd": -32.966472,
+   "edge_1h": null,
+   "lp_net_bps_1h": 4.091338,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 139,
+   "swaps": 8301,
+   "fees_usd": 596.673866,
+   "picked_1h_usd": -156.239423,
+   "edge_1h": null,
+   "lp_net_bps_1h": 4.86854,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 140,
+   "swaps": 6603,
+   "fees_usd": 902.615654,
+   "picked_1h_usd": 778.159073,
+   "edge_1h": 1.159937,
+   "lp_net_bps_1h": 0.52125,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 141,
+   "swaps": 5961,
+   "fees_usd": 483.813369,
+   "picked_1h_usd": -17.783159,
+   "edge_1h": null,
+   "lp_net_bps_1h": 3.944219,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 142,
+   "swaps": 8387,
+   "fees_usd": 493.393591,
+   "picked_1h_usd": 201.722417,
+   "edge_1h": 2.445904,
+   "lp_net_bps_1h": 2.257423,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 143,
+   "swaps": 5032,
+   "fees_usd": 470.028311,
+   "picked_1h_usd": 482.851747,
+   "edge_1h": 0.973442,
+   "lp_net_bps_1h": -0.105311,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 144,
+   "swaps": 9241,
+   "fees_usd": 776.065157,
+   "picked_1h_usd": 795.781248,
+   "edge_1h": 0.975224,
+   "lp_net_bps_1h": -0.096535,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 145,
+   "swaps": 7646,
+   "fees_usd": 602.048388,
+   "picked_1h_usd": 163.098641,
+   "edge_1h": 3.691315,
+   "lp_net_bps_1h": 2.805316,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 146,
+   "swaps": 5632,
+   "fees_usd": 565.773114,
+   "picked_1h_usd": 100.447925,
+   "edge_1h": 5.632502,
+   "lp_net_bps_1h": 3.394206,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 147,
+   "swaps": 8683,
+   "fees_usd": 1128.346948,
+   "picked_1h_usd": 949.314528,
+   "edge_1h": 1.188591,
+   "lp_net_bps_1h": 0.603321,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 148,
+   "swaps": 8842,
+   "fees_usd": 726.281379,
+   "picked_1h_usd": 1088.381404,
+   "edge_1h": 0.667304,
+   "lp_net_bps_1h": -1.95374,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 149,
+   "swaps": 8734,
+   "fees_usd": 793.852449,
+   "picked_1h_usd": 1036.972465,
+   "edge_1h": 0.765548,
+   "lp_net_bps_1h": -1.159528,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 150,
+   "swaps": 8252,
+   "fees_usd": 740.03131,
+   "picked_1h_usd": -48.831904,
+   "edge_1h": null,
+   "lp_net_bps_1h": 4.046308,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 151,
+   "swaps": 7868,
+   "fees_usd": 849.831815,
+   "picked_1h_usd": 504.931034,
+   "edge_1h": 1.683065,
+   "lp_net_bps_1h": 1.551391,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 152,
+   "swaps": 12767,
+   "fees_usd": 1117.497344,
+   "picked_1h_usd": 734.525479,
+   "edge_1h": 1.521387,
+   "lp_net_bps_1h": 1.308404,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 153,
+   "swaps": 8711,
+   "fees_usd": 856.633533,
+   "picked_1h_usd": 140.443608,
+   "edge_1h": 6.099484,
+   "lp_net_bps_1h": 3.185509,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 154,
+   "swaps": 14534,
+   "fees_usd": 1572.033153,
+   "picked_1h_usd": 552.77482,
+   "edge_1h": 2.843894,
+   "lp_net_bps_1h": 2.455249,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 155,
+   "swaps": 23642,
+   "fees_usd": 1325.669432,
+   "picked_1h_usd": -34.00301,
+   "edge_1h": null,
+   "lp_net_bps_1h": 3.905789,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 156,
+   "swaps": 9618,
+   "fees_usd": 833.206725,
+   "picked_1h_usd": 21.406247,
+   "edge_1h": 38.923532,
+   "lp_net_bps_1h": 3.865734,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 157,
+   "swaps": 7384,
+   "fees_usd": 596.946285,
+   "picked_1h_usd": 161.653755,
+   "edge_1h": 3.692746,
+   "lp_net_bps_1h": 2.836837,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 158,
+   "swaps": 8354,
+   "fees_usd": 974.202795,
+   "picked_1h_usd": -284.987189,
+   "edge_1h": null,
+   "lp_net_bps_1h": 5.161444,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 159,
+   "swaps": 8631,
+   "fees_usd": 1177.99426,
+   "picked_1h_usd": 382.542677,
+   "edge_1h": 3.07938,
+   "lp_net_bps_1h": 2.563516,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 160,
+   "swaps": 24318,
+   "fees_usd": 1983.500915,
+   "picked_1h_usd": 90.588217,
+   "edge_1h": 21.895794,
+   "lp_net_bps_1h": 3.617814,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 161,
+   "swaps": 15562,
+   "fees_usd": 1387.061332,
+   "picked_1h_usd": 556.550484,
+   "edge_1h": 2.492247,
+   "lp_net_bps_1h": 2.279268,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 162,
+   "swaps": 12339,
+   "fees_usd": 1473.055437,
+   "picked_1h_usd": 1163.138873,
+   "edge_1h": 1.266448,
+   "lp_net_bps_1h": 0.800724,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 163,
+   "swaps": 9281,
+   "fees_usd": 1246.954346,
+   "picked_1h_usd": 1398.042217,
+   "edge_1h": 0.891929,
+   "lp_net_bps_1h": -0.461221,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 164,
+   "swaps": 12365,
+   "fees_usd": 2117.346487,
+   "picked_1h_usd": 433.374913,
+   "edge_1h": 4.885715,
+   "lp_net_bps_1h": 3.077383,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 165,
+   "swaps": 6370,
+   "fees_usd": 1190.099597,
+   "picked_1h_usd": 626.034437,
+   "edge_1h": 1.901013,
+   "lp_net_bps_1h": 1.843977,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 166,
+   "swaps": 4346,
+   "fees_usd": 1064.193705,
+   "picked_1h_usd": -88.551948,
+   "edge_1h": null,
+   "lp_net_bps_1h": 4.128822,
+   "reference": "hyperliquid"
+  },
+  {
+   "how": 167,
+   "swaps": 5649,
+   "fees_usd": 1241.602908,
+   "picked_1h_usd": 402.933933,
+   "edge_1h": 3.081406,
+   "lp_net_bps_1h": 2.56331,
+   "reference": "hyperliquid"
+  }
+ ]
+}

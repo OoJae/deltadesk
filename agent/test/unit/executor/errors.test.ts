@@ -1,4 +1,8 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
+  type Abi,
+  type AbiParameter,
   CallExecutionError,
   ContractFunctionRevertedError,
   ExecutionRevertedError,
@@ -10,12 +14,17 @@ import {
   WaitForTransactionReceiptTimeoutError,
 } from "viem";
 import { describe, expect, it } from "vitest";
+import { CONTRACTS_ABI_DIR, EXTRAS_SECTIONS } from "../../../scripts/abi-sync.js";
 import { deskLaneAbi } from "../../../src/executor/abi/DeskLane.js";
+import { deskLaneFactoryAbi } from "../../../src/executor/abi/DeskLaneFactory.js";
 import {
   classifyError,
+  classifyRevert,
   classifySignerError,
   classifySimulationError,
   decodeRevert,
+  FACTORY_ERROR_NAMES,
+  FENCE_ERROR_NAMES,
   LANE_ERROR_NAMES,
   revertDataOf,
 } from "../../../src/executor/errors.js";
@@ -54,6 +63,7 @@ describe("revert decoding", () => {
     expect(decodeRevert(outsideFence)).toEqual({
       errorName: "RangeOutsideFence",
       args: [0, -222400, -222200, -222300, 100],
+      source: "lane",
     });
   });
 
@@ -65,6 +75,124 @@ describe("revert decoding", () => {
     });
     expect(revertDataOf(err)).toBe(decisionUsed);
     expect(classifyError(err).code).toBe("SIM_DECISION_USED");
+  });
+});
+
+/** A zero value for each parameter type (enough to encode any error the contracts declare). */
+function zeroOf(p: AbiParameter): unknown {
+  if (p.type === "address") return "0x0000000000000000000000000000000000000000";
+  if (p.type === "bool") return false;
+  if (/^u?int\d*$/.test(p.type)) return 0n;
+  if (/^bytes\d+$/.test(p.type)) return `0x${"00".repeat(Number(p.type.slice(5)))}`;
+  if (p.type === "tuple" && "components" in p) return p.components.map(zeroOf);
+  throw new Error(`no zero value for ${p.type}`);
+}
+
+type AbiError = Extract<Abi[number], { type: "error" }>;
+
+const extras = JSON.parse(readFileSync(join(CONTRACTS_ABI_DIR, "extras.json"), "utf8")) as Record<
+  (typeof EXTRAS_SECTIONS)[number],
+  Array<{ type: string }>
+>;
+const extraErrors = EXTRAS_SECTIONS.flatMap((section) =>
+  (extras[section].filter((i) => i.type === "error") as AbiError[]).map(
+    (e) => [section, e] as const,
+  ),
+);
+
+describe("implementation-only errors (contracts/abi/extras.json)", () => {
+  it("there are some, from each contract that declares them", () => {
+    expect(extraErrors.map(([, e]) => e.name)).toEqual(
+      expect.arrayContaining([
+        "ReentrancyGuardReentrantCall",
+        "SafeERC20FailedOperation",
+        "LaneExists",
+        "ImplementationTimelocked",
+        "NoPendingImplementation",
+        "BadConfig",
+      ]),
+    );
+  });
+
+  it.each(extraErrors.map(([section, e]) => [e.name, section, e] as const))(
+    "%s decodes by name as the %s's error (never SIM_POLICY 'unknown revert')",
+    (name, section, e) => {
+      const data = encodeErrorResult({
+        abi: [e],
+        errorName: e.name,
+        args: e.inputs.map(zeroOf) as never,
+      });
+      expect(decodeRevert(data)).toMatchObject({ errorName: name, source: section });
+      const names = {
+        lane: LANE_ERROR_NAMES,
+        factory: FACTORY_ERROR_NAMES,
+        fence: FENCE_ERROR_NAMES,
+      };
+      expect(names[section].has(name)).toBe(true);
+      const c = classifyError(viemCallRevert(data));
+      expect(c.message).toContain(`${section} reverted: ${name}`);
+      expect(c.message).not.toMatch(/unknown revert/);
+    },
+  );
+
+  it("a reentrant call and a refusing token fail closed (SIM_POLICY, no retry) with a plain reason", () => {
+    const reentrant = classifyError(
+      viemCallRevert(
+        encodeErrorResult({ abi: deskLaneAbi, errorName: "ReentrancyGuardReentrantCall" }),
+      ),
+    );
+    expect(reentrant.code).toBe("SIM_POLICY");
+    expect(reentrant.outcome).toBe("fail");
+    expect(reentrant.message).toMatch(/re-entered the lane/);
+    const token = "0x2222222222222222222222222222222222222222";
+    const refused = classifySimulationError(
+      viemCallRevert(
+        encodeErrorResult({
+          abi: deskLaneAbi,
+          errorName: "SafeERC20FailedOperation",
+          args: [token],
+        }),
+      ),
+    );
+    expect(refused.code).toBe("SIM_POLICY");
+    expect(refused.message).toContain(token);
+    expect(refused.message).toMatch(/refused a transfer or approval/);
+    expect((refused.detail as { errorName: string }).errorName).toBe("SafeERC20FailedOperation");
+  });
+
+  it("factory-side LaneExists and ImplementationTimelocked are recognised by name", () => {
+    const lane = "0x1111111111111111111111111111111111111111";
+    const exists = classifyRevert(
+      encodeErrorResult({ abi: deskLaneFactoryAbi, errorName: "LaneExists", args: [lane] }),
+      null,
+    );
+    expect(exists.code).toBe("SIM_POLICY");
+    expect(exists.message).toMatch(/^factory reverted: LaneExists \(/);
+    expect(exists.message).toContain(lane);
+    expect(exists.detail).toMatchObject({ errorName: "LaneExists", source: "factory" });
+    const locked = classifyRevert(
+      encodeErrorResult({
+        abi: deskLaneFactoryAbi,
+        errorName: "ImplementationTimelocked",
+        args: [1, 1_790_000_000n],
+      }),
+      null,
+    );
+    expect(locked.message).toMatch(/kind-1 implementation change is timelocked until 1790000000/);
+    // The frozen factory errors decode as the factory's too.
+    expect(
+      decodeRevert(encodeErrorResult({ abi: deskLaneFactoryAbi, errorName: "NotAdmin" })),
+    ).toMatchObject({ errorName: "NotAdmin", source: "factory" });
+  });
+
+  it("Error(string) is the solidity built-in, still SIM_POLICY", () => {
+    const data = encodeErrorResult({
+      abi: [{ type: "error", name: "Error", inputs: [{ type: "string", name: "message" }] }],
+      errorName: "Error",
+      args: ["STF"],
+    });
+    expect(decodeRevert(data)).toMatchObject({ errorName: "Error", source: "solidity" });
+    expect(classifyError(viemCallRevert(data)).code).toBe("SIM_POLICY");
   });
 });
 

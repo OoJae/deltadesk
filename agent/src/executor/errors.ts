@@ -3,8 +3,15 @@
  * becomes an ExecError whose code maps to one outcome (EXEC_ERROR_OUTCOME in types.ts).
  *
  * viem errors are classified by walking their cause chain (`BaseError.walk()`): the first revert
- * payload found is decoded against the lane's custom errors; otherwise the node's message and the
- * transport error class decide. Anything unrecognised is UNKNOWN (→ reconciler), never a success.
+ * payload found is decoded by name against every DeltaDesk custom error (the lane's, the factory's
+ * and the fence's, implementation-only ones included: contracts/abi/extras.json via abi-sync) plus
+ * Error(string) and Panic(uint256); otherwise the node's message and the transport error class
+ * decide. Anything unrecognised is UNKNOWN (→ reconciler), never a success.
+ *
+ * Decoded reverts: DecisionUsed → SIM_DECISION_USED (reconcile); every other custom error is
+ * SIM_POLICY (failed, never retried), named, with a plain reason for the ones that are not
+ * self-explanatory (a reentrant call, a token that refused a transfer, the factory's LaneExists /
+ * ImplementationTimelocked). An undecodable revert is still SIM_POLICY: fail closed.
  *
  * Signer errors (Dynamic) are classified separately (classifySignerError): a policy denial is
  * SIGNER_DENIED (→ policy_denied + safe mode), a dead delegation is SIGNER_REVOKED, and everything
@@ -12,6 +19,7 @@
  */
 
 import {
+  type Abi,
   BaseError,
   ChainDisconnectedError,
   ContractFunctionRevertedError,
@@ -35,17 +43,60 @@ import {
   isExecError,
 } from "../types.js";
 import { deskLaneAbi } from "./abi/DeskLane.js";
+import { deskLaneFactoryAbi } from "./abi/DeskLaneFactory.js";
+import { priceFenceAbi } from "./abi/PriceFence.js";
 
 export type { ErrorClassifier, ExecErrorCode, ExecErrorOutcome } from "../types.js";
 
-/** The lane's custom error names (from the generated ABI). */
+/** Which DeltaDesk contract declares a decoded error; `solidity` is Error(string) / Panic(uint256). */
+export type RevertSource = "lane" | "factory" | "fence" | "solidity";
+
+type ErrorItem = Extract<Abi[number], { type: "error" }>;
+
+const errorsOf = (abi: Abi): ErrorItem[] => abi.filter((i): i is ErrorItem => i.type === "error");
+
+/** The lane's custom error names (from the generated ABI, implementation-only ones included). */
 export const LANE_ERROR_NAMES: ReadonlySet<string> = new Set(
-  deskLaneAbi.filter((i) => i.type === "error").map((i) => i.name),
+  errorsOf(deskLaneAbi).map((i) => i.name),
 );
+/** The factory's custom error names (LaneExists, ImplementationTimelocked, …). */
+export const FACTORY_ERROR_NAMES: ReadonlySet<string> = new Set(
+  errorsOf(deskLaneFactoryAbi).map((i) => i.name),
+);
+/** The fence's custom error names (BadConfig; status() and usdPrice() never revert). */
+export const FENCE_ERROR_NAMES: ReadonlySet<string> = new Set(
+  errorsOf(priceFenceAbi).map((i) => i.name),
+);
+
+/** Decoding order: a signature both contracts declare decodes as the lane's. */
+const DECODE_ORDER: ReadonlyArray<readonly [RevertSource, Abi]> = [
+  ["lane", deskLaneAbi],
+  ["factory", deskLaneFactoryAbi],
+  ["fence", priceFenceAbi],
+  ["solidity", []], // decodeErrorResult always knows Error(string) and Panic(uint256)
+];
+
+/**
+ * Plain reasons for errors whose name alone does not tell an operator what happened. Every one of
+ * them stays SIM_POLICY: failed, never retried (the next tick plans from fresh state).
+ */
+const REVERT_REASONS: Readonly<Record<string, (args: readonly unknown[]) => string>> = {
+  ReentrancyGuardReentrantCall: () =>
+    "a call re-entered the lane mid-action (a token or pool hook); refused, never retried",
+  SafeERC20FailedOperation: (a) =>
+    `token ${String(a[0])} refused a transfer or approval (paused or blocklisted?)`,
+  MarketClosed: (a) => `the fence is closed to risk-adding (code ${String(a[0])})`,
+  LaneExists: (a) =>
+    `a lane with these parameters already exists at ${String(a[0])}; only its owner's own createLane lists it`,
+  ImplementationTimelocked: (a) =>
+    `the factory's kind-${String(a[0])} implementation change is timelocked until ${String(a[1])}`,
+  NoPendingImplementation: (a) => `no implementation change is pending for kind ${String(a[0])}`,
+};
 
 export interface DecodedRevert {
   errorName: string;
   args: readonly unknown[];
+  source: RevertSource;
 }
 
 const HEX_RE = /^0x[0-9a-fA-F]*$/;
@@ -88,14 +139,33 @@ export function revertDataOf(err: unknown): Hex | null {
   return null;
 }
 
-/** Decode a revert payload: the lane's custom errors, Error(string) and Panic(uint256). */
+/**
+ * Decode a revert payload by name: every lane, factory and fence custom error, Error(string) and
+ * Panic(uint256). Null when the selector is none of them.
+ */
 export function decodeRevert(data: Hex): DecodedRevert | null {
-  try {
-    const r = decodeErrorResult({ abi: deskLaneAbi, data });
-    return { errorName: r.errorName, args: (r.args ?? []) as readonly unknown[] };
-  } catch {
-    return null;
+  for (const [source, abi] of DECODE_ORDER) {
+    try {
+      const r = decodeErrorResult({ abi, data });
+      const declared = errorsOf(abi).some((e) => e.name === r.errorName);
+      return {
+        errorName: r.errorName,
+        args: (r.args ?? []) as readonly unknown[],
+        source: declared ? source : "solidity",
+      };
+    } catch {
+      /* not this contract's error */
+    }
   }
+  return null;
+}
+
+/** A one-line description of a decoded revert: `<contract> reverted: <Error>[ (reason)]`. */
+export function describeRevert(decoded: DecodedRevert | null): string {
+  if (decoded === null) return "lane reverted: unknown revert";
+  const who = decoded.source === "solidity" ? "lane" : decoded.source;
+  const reason = REVERT_REASONS[decoded.errorName]?.(decoded.args);
+  return `${who} reverted: ${decoded.errorName}${reason === undefined ? "" : ` (${reason})`}`;
 }
 
 /** All human-readable text of a chain (message, shortMessage, details), for node-message matching. */
@@ -172,8 +242,7 @@ export function classifyRevert(data: Hex | null, cause: unknown): ExecError {
       detail: decoded,
     });
   }
-  const name = decoded?.errorName ?? "unknown revert";
-  return new ExecError("SIM_POLICY", `lane reverted: ${name}`, {
+  return new ExecError("SIM_POLICY", describeRevert(decoded), {
     cause,
     detail: decoded ?? { errorName: null, args: [], data },
   });

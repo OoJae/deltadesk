@@ -6,6 +6,8 @@
  *   2. every unresolved attempt (signed / broadcast / unknown) is resolved from the chain with its
  *      STORED bytes: a crash after `signed` rebroadcasts those exact bytes and never re-signs.
  *   3. decisions stranded in `executing` are resolved from their executions.
+ *   4. approvals left `pending` are closed (expired past their window, else cancelled, with a
+ *      reason): their waiter died with the process, so no channel may answer them afterwards.
  *
  * Resolving one attempt ("stuck or unknown transactions"):
  *   - a receipt exists → confirmed / reverted (gas, fee and USD recorded; same-nonce siblings
@@ -15,13 +17,20 @@
  *     nonce was consumed by someone else: NONCE_CONFLICT → dropped + safe mode.
  *   - deadline passed and the tx is nowhere → dropped (final: the lane rejects it after its
  *     deadline, so it can never take effect).
+ *   - a RISK-ADDING attempt whose desk is no longer active / registered (safe mode or a revocation
+ *     that landed while the process was down; the executor's own DESK_HALTED probe): never
+ *     (re)broadcast, and never finalized here either: broadcastCount 0 does not prove the bytes
+ *     were never sent (a crash between broadcast() and its record, or an RPC_UNAVAILABLE send, leaves
+ *     0 too), so the attempt stays pending, left to land or to be dropped by the deadline branch
+ *     above (at most DESK_DEADLINE_SEC later; its nonce stays taken until then). Risk-reducing
+ *     attempts are not held back.
  *   - latest == nonce, before the deadline → rebroadcast the same bytes (bounded).
  */
 
 import { canonicalJson } from "../canonical.js";
 import { txHashOf } from "../executor/broadcaster.js";
 import { classifyError } from "../executor/errors.js";
-import { enterSafeMode } from "../executor/safe-mode.js";
+import { type DeskStatusProbe, deskHaltedReason, enterSafeMode } from "../executor/safe-mode.js";
 import type {
   Broadcaster,
   ChainClient,
@@ -60,6 +69,8 @@ export interface AttemptResolverDeps {
   ethUsd?: (() => number | null) | undefined;
   /** Total broadcasts of one signed attempt (initial + rebroadcasts). Default 3. */
   maxBroadcasts?: number;
+  /** The desk status probe (the executor's DESK_HALTED check). Default: the desks table. */
+  deskStatus?: DeskStatusProbe | undefined;
 }
 
 export interface AttemptResolver {
@@ -142,6 +153,8 @@ function isFinal(a: TxAttemptRow): boolean {
 export function createAttemptResolver(deps: AttemptResolverDeps): AttemptResolver {
   const maxBroadcasts = deps.maxBroadcasts ?? 3;
   const { db, chain, logger } = deps;
+  const deskStatus: DeskStatusProbe =
+    deps.deskStatus ?? ((lane) => db.getDesk(lane)?.status ?? null);
 
   function drop(
     attempt: TxAttemptRow,
@@ -217,6 +230,23 @@ export function createAttemptResolver(deps: AttemptResolverDeps): AttemptResolve
     }
     if (latest < attempt.nonce) return "pending"; // an earlier nonce is still outstanding
 
+    // The desk may have left active while the process was down (a crash between `signed` and the
+    // broadcast, then safe mode or a revocation): stored risk-adding bytes are not sent for it. Nor
+    // is the attempt finalized: the bytes may already be out (broadcastCount 0 cannot prove they are
+    // not), so only a receipt or the deadline above may settle it.
+    const exec = db.getExecution(attempt.executionId);
+    const halted =
+      exec === null
+        ? "no execution row for this attempt"
+        : deskHaltedReason(deskStatus, exec.laneAddress, exec.riskClass);
+    if (halted !== null) {
+      logger.warn(
+        { txHash: attempt.txHash, reason: halted, broadcastCount: attempt.broadcastCount },
+        "not (re)broadcasting a risk-adding attempt for a halted desk; held until it lands or expires",
+      );
+      return "pending";
+    }
+
     if (attempt.broadcastCount >= maxBroadcasts) return "pending";
     if (txHashOf(attempt.signedRawTx).toLowerCase() !== attempt.txHash.toLowerCase()) {
       logger.error(
@@ -273,6 +303,26 @@ export function createAttemptResolver(deps: AttemptResolverDeps): AttemptResolve
 
 export interface StartupReconcilerDeps extends AttemptResolverDeps {}
 
+export const ORPHANED_APPROVAL_REASON =
+  "the agent restarted: the request waiting for this answer is gone";
+
+/**
+ * Close every approval still pending (DB only; safe before the daemon starts, under its lock).
+ * Returns how many were closed; each one is logged.
+ */
+export function closeOrphanedApprovals(
+  deps: { db: Pick<DeskDb, "closeOrphanedApprovals">; logger: DeskLogger },
+  nowMs: number,
+): number {
+  const closed = deps.db.closeOrphanedApprovals(ORPHANED_APPROVAL_REASON, nowMs);
+  for (const a of closed)
+    deps.logger.warn(
+      { decisionId: a.decisionId, lane: a.laneAddress, status: a.status },
+      "closed an approval left pending by a restart",
+    );
+  return closed.length;
+}
+
 export function createStartupReconciler(deps: StartupReconcilerDeps): StartupReconciler {
   const resolver = createAttemptResolver(deps);
   return {
@@ -283,12 +333,14 @@ export function createStartupReconciler(deps: StartupReconcilerDeps): StartupRec
       );
       const t = await resolver.resolveAll(nowMs);
       const decisionsReconciled = deps.db.reconcileOrphanedDecisions(nowMs);
+      const approvalsClosed = closeOrphanedApprovals(deps, nowMs);
       const report: StartupReport = {
         failedUnsigned,
         rebroadcast: t.rebroadcast,
         resolved: t.confirmed + t.reverted + t.dropped + t.conflict + t.replaced,
         unknown: t.pending,
         decisionsReconciled,
+        approvalsClosed,
       };
       deps.logger.info({ ...report }, "startup reconciliation done");
       return report;

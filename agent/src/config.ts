@@ -95,6 +95,11 @@ const privateKeySchema = z
   .regex(/^0x[0-9a-fA-F]{64}$/, "must be a 0x-prefixed 32-byte hex key");
 const decimalSchema = z.string().regex(/^\d+(\.\d+)?$/, "must be a non-negative decimal");
 const flag01 = z.enum(["0", "1"]);
+/** WATCHDOG_AGENT_KEY: a dedicated shared secret, e.g. `openssl rand -hex 32`. */
+const watchdogKeySchema = z
+  .string()
+  .min(32, "WATCHDOG_AGENT_KEY must be at least 32 characters")
+  .refine((s) => s.trim() === s, "WATCHDOG_AGENT_KEY must not carry surrounding whitespace");
 const boolStr = z.enum(["true", "false"]);
 
 const EnvSchema = z.object({
@@ -177,6 +182,8 @@ const EnvSchema = z.object({
   PORT: def(z.coerce.number().int().min(1).max(65535).default(8080)),
   DESK_HTTP_HOST: def(z.string().min(1).default("0.0.0.0")),
   DESK_AGENT_API_KEY: opt(z.string().min(24)),
+  // The watchdog's own shared secret for GET /lanes/:lane/actions/:decisionId (never the web's key).
+  WATCHDOG_AGENT_KEY: opt(watchdogKeySchema),
   LOG_LEVEL: def(z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).default("info")),
 });
 
@@ -260,7 +267,13 @@ export interface AppConfig {
   };
   strategy: StrategyParams;
   paths: { dbPath: string; approvalDir: string };
-  http: { port: number; host: string; agentApiKey: string | undefined };
+  http: {
+    port: number;
+    host: string;
+    agentApiKey: string | undefined;
+    /** WATCHDOG_AGENT_KEY: authenticates the watchdog's cross-check route (unset: route off). */
+    watchdogKey: string | undefined;
+  };
   logLevel: DeskEnv["LOG_LEVEL"];
   capabilities: Capabilities;
 }
@@ -412,6 +425,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const maxFeePerGasWei = parseUnits(e.DESK_MAX_FEE_GWEI, 9);
   const feeFloorWei = parseUnits(e.DESK_FEE_FLOOR_GWEI, 9);
   if (feeFloorWei > maxFeePerGasWei) refuse("DESK_FEE_FLOOR_GWEI exceeds DESK_MAX_FEE_GWEI.");
+  if (e.WATCHDOG_AGENT_KEY !== undefined && e.WATCHDOG_AGENT_KEY === e.DESK_AGENT_API_KEY) {
+    refuse(
+      "WATCHDOG_AGENT_KEY equals DESK_AGENT_API_KEY: the watchdog's key must be its own (the web must never be able to vouch for an action).",
+    );
+  }
   const rsaPem = normalisePem(e.DYNAMIC_RSA_PRIVATE_KEY_PEM);
 
   const capabilities: Capabilities = {
@@ -500,7 +518,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     },
     strategy: { ...STRATEGY_DEFAULTS },
     paths: { dbPath: e.DESK_DB_PATH, approvalDir: e.DESK_APPROVAL_DIR },
-    http: { port: e.PORT, host: e.DESK_HTTP_HOST, agentApiKey: e.DESK_AGENT_API_KEY },
+    http: {
+      port: e.PORT,
+      host: e.DESK_HTTP_HOST,
+      agentApiKey: e.DESK_AGENT_API_KEY,
+      watchdogKey: e.WATCHDOG_AGENT_KEY,
+    },
     logLevel: e.LOG_LEVEL,
     capabilities,
   };
@@ -625,6 +648,7 @@ const WatchdogEnvSchema = z.object({
   DESK_LANE_B: opt(addressSchema),
   WATCHDOG_GUARDIAN_PRIVATE_KEY: opt(privateKeySchema),
   WATCHDOG_AGENT_URL: opt(z.url()),
+  WATCHDOG_AGENT_KEY: opt(watchdogKeySchema),
   WATCHDOG_ARM: def(flag01.default("0")),
   WATCHDOG_DRY_RUN: def(boolStr.default("true")),
   WATCHDOG_INTERVAL_SEC: def(z.coerce.number().int().min(5).default(30)),
@@ -632,6 +656,8 @@ const WatchdogEnvSchema = z.object({
   WATCHDOG_REVERT_STREAK: def(z.coerce.number().int().min(1).default(3)),
   WATCHDOG_RERANGE_HEADROOM: def(z.coerce.number().int().min(0).default(1)),
   WATCHDOG_DEADMAN_MIN: def(z.coerce.number().int().min(1).default(15)),
+  // An operator action unverified this long while the agent is down → pause (once per action).
+  WATCHDOG_UNVERIFIED_MIN: def(z.coerce.number().int().min(1).default(15)),
   WATCHDOG_OPERATOR_RESERVE_ETH: def(decimalSchema.default("0.001")),
   // The watchdog's OWN bot: it long-polls getUpdates for /pause, and two pollers on one bot steal
   // each other's updates (the agent's approve/deny buttons included).
@@ -658,6 +684,8 @@ export interface WatchdogConfig {
   lanes: Address[];
   guardianPrivateKey: `0x${string}` | undefined;
   agentUrl: string | undefined;
+  /** x-watchdog-key for the agent's GET /lanes/:lane/actions/:decisionId (required with agentUrl). */
+  agentKey: string | undefined;
   armed: boolean;
   dryRun: boolean;
   intervalMs: number;
@@ -691,8 +719,22 @@ export function loadWatchdogConfig(env: NodeJS.ProcessEnv = process.env): Watchd
     refuse(`CHAIN_ID=${e.CHAIN_ID} is only allowed against a loopback RPC.`);
   }
   if (!dryRun && !armed) refuse("WATCHDOG_DRY_RUN=false requires WATCHDOG_ARM=1.");
+  // Every operator LaneAction is cross-checked with the agent: an agent URL without the key would
+  // turn every one of them into an unverifiable action.
+  if (e.WATCHDOG_AGENT_URL !== undefined && e.WATCHDOG_AGENT_KEY === undefined) {
+    refuse(
+      "WATCHDOG_AGENT_URL requires WATCHDOG_AGENT_KEY (≥ 32 chars, the same value as the agent's): the watchdog cross-checks every operator LaneAction with the agent.",
+    );
+  }
   if (!dryRun && e.WATCHDOG_GUARDIAN_PRIVATE_KEY === undefined) {
     refuse("WATCHDOG_DRY_RUN=false requires WATCHDOG_GUARDIAN_PRIVATE_KEY.");
+  }
+  // Live without the agent: no operator action could ever be verified, and its /health would read
+  // as down (the dead-man switch would pause and exit at every scheduled action).
+  if (!dryRun && e.WATCHDOG_AGENT_URL === undefined) {
+    refuse(
+      "WATCHDOG_DRY_RUN=false requires WATCHDOG_AGENT_URL (and WATCHDOG_AGENT_KEY): the watchdog cross-checks every operator LaneAction with the agent and reads its /health.",
+    );
   }
   if (
     e.WATCHDOG_TELEGRAM_BOT_TOKEN !== undefined &&
@@ -712,6 +754,7 @@ export function loadWatchdogConfig(env: NodeJS.ProcessEnv = process.env): Watchd
     lanes: [e.DESK_LANE_A, e.DESK_LANE_B].filter((a): a is string => a !== undefined) as Address[],
     guardianPrivateKey: e.WATCHDOG_GUARDIAN_PRIVATE_KEY as `0x${string}` | undefined,
     agentUrl: e.WATCHDOG_AGENT_URL,
+    agentKey: e.WATCHDOG_AGENT_KEY,
     armed,
     dryRun,
     intervalMs: e.WATCHDOG_INTERVAL_SEC * 1000,
@@ -721,6 +764,7 @@ export function loadWatchdogConfig(env: NodeJS.ProcessEnv = process.env): Watchd
       rerangeHeadroom: e.WATCHDOG_RERANGE_HEADROOM,
       operatorReserveWei: parseUnits(e.WATCHDOG_OPERATOR_RESERVE_ETH, 18),
       deadManMs: e.WATCHDOG_DEADMAN_MIN * 60_000,
+      unverifiedMaxMs: e.WATCHDOG_UNVERIFIED_MIN * 60_000,
     },
     telegram: {
       botToken: e.WATCHDOG_TELEGRAM_BOT_TOKEN ?? e.TELEGRAM_BOT_TOKEN,

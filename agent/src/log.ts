@@ -25,6 +25,8 @@ export const SECRET_KEYS = [
   "decryptedWalletApiKey",
   "apiKey",
   "agentApiKey",
+  "agentKey",
+  "watchdogKey",
   "kek",
   "kekB64",
   "dek",
@@ -52,6 +54,7 @@ const SECRET_HEADERS = [
   "x-deltadesk-key",
   "x-api-key",
   "x-desk-agent-key",
+  "x-watchdog-key",
 ] as const;
 
 export const REDACTED = "[redacted]";

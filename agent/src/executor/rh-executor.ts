@@ -36,7 +36,6 @@ import {
   type Clock,
   type DeskDb,
   type DeskLogger,
-  type DeskStatus,
   ExecError,
   type Executor,
   type Hex,
@@ -58,7 +57,12 @@ import type { LaneCalldataBuilder } from "./calldata.js";
 import { encodeDecisionId } from "./decision-id.js";
 import { classifyError, classifyRevert, classifySignerError, revertDataOf } from "./errors.js";
 import { type DeskFeePolicy, gasLimitFor } from "./fees.js";
-import { applyErrorOutcome, enterSafeMode } from "./safe-mode.js";
+import {
+  applyErrorOutcome,
+  type DeskStatusProbe,
+  deskHaltedReason,
+  enterSafeMode,
+} from "./safe-mode.js";
 
 export type { Executor, PreparedStep, StepOutcome, StepRequest } from "../types.js";
 
@@ -95,7 +99,7 @@ export interface RhExecutorDeps {
    * broadcasts (the reconciler and the webhook change it concurrently). Default: the desks table.
    * Only active / registered desks send risk-adding transactions.
    */
-  deskStatus?: ((laneAddress: Address) => DeskStatus | null) | undefined;
+  deskStatus?: DeskStatusProbe | undefined;
 }
 
 const MAX_FEE_RESIGNS = 2;
@@ -116,19 +120,12 @@ export function createRhExecutor(deps: RhExecutorDeps): Executor {
   const signerAddress = signer.address.toLowerCase() as `0x${string}`;
   const margin = deps.timing.broadcastMarginSec ?? 2;
   const statusDeps = { db, notifier: deps.notifier, logger };
-  const deskStatus = deps.deskStatus ?? ((lane: Address) => db.getDesk(lane)?.status ?? null);
+  const deskStatus: DeskStatusProbe =
+    deps.deskStatus ?? ((lane: Address) => db.getDesk(lane)?.status ?? null);
 
   /** Why this step may not be sent right now, or null when it may (fail-closed on a read error). */
   function haltedReason(step: PreparedStep): string | null {
-    if (step.riskClass !== "adding") return null;
-    let status: DeskStatus | null;
-    try {
-      status = deskStatus(step.laneAddress);
-    } catch (err) {
-      return `desk status unreadable (${err instanceof Error ? err.message : String(err)})`;
-    }
-    if (status === "active" || status === "registered") return null;
-    return status === null ? "no desk row for this lane" : `desk is ${status}`;
+    return deskHaltedReason(deskStatus, step.laneAddress, step.riskClass);
   }
 
   function assertLaneStep(req: StepRequest): asserts req is StepRequest & {

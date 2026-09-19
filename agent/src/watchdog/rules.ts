@@ -6,16 +6,27 @@
  *                   fence prices (i.e. not explained by the market)          → pause + exit
  *   rerange-cap     reranges left in the 1 h or 24 h bucket ≤ headroom        → pause
  *   revert-streak   ≥ N operator transactions reverted in a row               → pause
- *   foreign-action  the operator key acted outside the agent                  → pause
+ *   foreign-action  the operator key acted outside the agent: a decisionId not in the agent's
+ *                   layout, or one the agent's DB does not know (GET /lanes/…/actions/…) → pause
+ *   unverified-action an operator action the agent could not be asked about (unreachable, 5xx,
+ *                   refused): critical alert only, no pause, however many pile up
+ *   unverified-stale  one of them unverified for WATCHDOG_UNVERIFIED_MIN while the agent is down
+ *                   (no /health, or a stale heartbeat): nobody can vouch for the operator → pause.
+ *                   An alive agent that refuses (a key mismatch) never escalates: that stays a
+ *                   critical alert, and a live agent still reconciles its own LaneActions. Once per
+ *                   action: main.ts stops counting an action once it has paused the lane (the
+ *                   owner's unpause stands).
  *   operator-gas    operator ETH below the reserve (the agent could not exit) → pause + exit
  *   dead-man        agent heartbeat missing within ±15 min of a scheduled action → pause + exit
  *   telegram-pause  a human asked on Telegram                                 → pause
  *
- * "exit" only happens when the lane still has positions. The verdict is advisory to main.ts, which
- * skips a pause for a lane that is already paused.
+ * "exit" only happens when the lane still has positions. A verdict whose triggers are all alert-only
+ * is "alert" (no transaction). The verdict is advisory to main.ts, which skips a pause for a lane
+ * that is already paused.
  */
 
 import type {
+  HealthView,
   WatchdogInput,
   WatchdogRules,
   WatchdogThresholds,
@@ -34,6 +45,13 @@ export type {
 export const HEARTBEAT_STALE_MS = 120_000;
 
 const EXITING: ReadonlySet<WatchdogTriggerName> = new Set(["nav-drop", "operator-gas", "dead-man"]);
+/** Triggers that alert but never pause on their own. */
+const ALERT_ONLY: ReadonlySet<WatchdogTriggerName> = new Set(["unverified-action"]);
+
+/** Alive: the agent's loop ticked recently and holds the lock (what the dead-man switch reads). */
+export function agentAlive(h: HealthView | null): boolean {
+  return h?.lockHeld === true && h.lastTickAgeMs !== null && h.lastTickAgeMs <= HEARTBEAT_STALE_MS;
+}
 
 export const evaluateWatchdog: WatchdogRules = (
   input: WatchdogInput,
@@ -78,6 +96,22 @@ export const evaluateWatchdog: WatchdogRules = (
     });
   }
 
+  if (input.unverifiedActions > 0) {
+    const age = input.unverifiedForMs;
+    const limitMin = t.unverifiedMaxMs / 60_000;
+    if (age !== null && age >= t.unverifiedMaxMs && !agentAlive(input.agentHealth)) {
+      triggers.push({
+        trigger: "unverified-stale",
+        detail: `${input.unverifiedActions} operator lane action(s) unverified, the oldest for ${Math.floor(age / 60_000)} min, and the agent is down (limit ${limitMin} min)`,
+      });
+    } else {
+      triggers.push({
+        trigger: "unverified-action",
+        detail: `${input.unverifiedActions} operator lane action(s) could not be checked with the agent (unreachable or refusing); no pause unless one stays unverified ${limitMin} min with the agent down`,
+      });
+    }
+  }
+
   if (input.operatorEthWei !== null && input.operatorEthWei < t.operatorReserveWei) {
     triggers.push({
       trigger: "operator-gas",
@@ -90,9 +124,7 @@ export const evaluateWatchdog: WatchdogRules = (
     Math.abs(input.nowMs - input.scheduledActionAtMs) <= t.deadManMs
   ) {
     const h = input.agentHealth;
-    const alive =
-      h?.lockHeld === true && h.lastTickAgeMs !== null && h.lastTickAgeMs <= HEARTBEAT_STALE_MS;
-    if (!alive) {
+    if (!agentAlive(h)) {
       triggers.push({
         trigger: "dead-man",
         detail:
@@ -108,6 +140,7 @@ export const evaluateWatchdog: WatchdogRules = (
   }
 
   if (triggers.length === 0) return { action: "none", triggers };
+  if (triggers.every((x) => ALERT_ONLY.has(x.trigger))) return { action: "alert", triggers };
   const exit = input.hasPositions && triggers.some((x) => EXITING.has(x.trigger));
   return { action: exit ? "pause_and_exit" : "pause", triggers };
 };
@@ -117,7 +150,7 @@ export function plannedActions(
   verdict: WatchdogVerdict,
   lane: { paused: boolean; hasPositions: boolean },
 ): Array<"pause" | "exitAll"> {
-  if (verdict.action === "none") return [];
+  if (verdict.action === "none" || verdict.action === "alert") return [];
   const out: Array<"pause" | "exitAll"> = [];
   if (!lane.paused) out.push("pause");
   if (verdict.action === "pause_and_exit" && lane.hasPositions) out.push("exitAll");

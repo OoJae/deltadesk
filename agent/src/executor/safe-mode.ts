@@ -12,7 +12,35 @@ import type {
   ExecError,
   Notifier,
   NotifySeverity,
+  RiskClass,
 } from "../types.js";
+
+/** Reads a desk's status right now (the reconciler and the webhook change it concurrently). */
+export type DeskStatusProbe = (laneAddress: Address) => DeskStatus | null;
+
+/**
+ * Why a transaction of this risk class may not be signed or sent for this lane right now, or null
+ * when it may. Only risk-ADDING steps are held back, and only an active / registered desk sends
+ * them; safe mode, revoked, disabled, a missing desk row or an unreadable status all refuse
+ * (fail-closed). Risk-reducing steps are never held here: they only lower risk. The executor
+ * (before signing and before each broadcast) and the attempt resolver (before sending stored bytes)
+ * share this one probe.
+ */
+export function deskHaltedReason(
+  deskStatus: DeskStatusProbe,
+  laneAddress: Address,
+  riskClass: RiskClass,
+): string | null {
+  if (riskClass !== "adding") return null;
+  let status: DeskStatus | null;
+  try {
+    status = deskStatus(laneAddress);
+  } catch (err) {
+    return `desk status unreadable (${err instanceof Error ? err.message : String(err)})`;
+  }
+  if (status === "active" || status === "registered") return null;
+  return status === null ? "no desk row for this lane" : `desk is ${status}`;
+}
 
 export interface DeskStatusDeps {
   db: Pick<DeskDb, "getDesk" | "setDeskStatus">;

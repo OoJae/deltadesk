@@ -7,7 +7,8 @@
  * 2. The user's Dynamic JWT (Authorization: Bearer …), verified with jose against the environment
  *    JWKS: RS256 only, expiry enforced, the environment must be ours, and a token still waiting on
  *    MFA (scope `requiresAdditionalAuth`) is refused. The verified wallets are the JWT's blockchain
- *    `verified_credentials`; the routes then require the lane's OWNER (the Vault) among them.
+ *    `verified_credentials`; the routes then require the lane's OWNER (the Vault) among them (the
+ *    delegation status route: the OPERATOR among them).
  */
 
 import { createHash, timingSafeEqual } from "node:crypto";
@@ -114,8 +115,12 @@ export function createJwtVerifier(opts: JwtVerifierOptions): JwtVerifier {
   };
 }
 
+/** `address` must be one of the user's verified wallets (403 otherwise). */
+export function requireWallet(user: VerifiedUser, address: Address, message: string): void {
+  if (!user.wallets.includes(address.toLowerCase() as Address)) throw new AuthError(message, 403);
+}
+
 /** The verified wallet must be the lane's owner (the Vault). */
 export function requireOwner(user: VerifiedUser, owner: Address): void {
-  if (!user.wallets.includes(owner.toLowerCase() as Address))
-    throw new AuthError("the signed-in wallet is not this lane's owner", 403);
+  requireWallet(user, owner, "the signed-in wallet is not this lane's owner");
 }

@@ -9,6 +9,8 @@
  *     fills, lane actions, approvals, server wallets, plus the write-ahead triggers.
  * v3: delegation_revocations: a Dynamic revoke recorded per event (even for a wallet we never
  *     stored), so a delegation event that is not newer can never (re)activate the wallet.
+ * v4: approvals.close_reason: why an approval was closed without an answer (its window ran out, a
+ *     risk-reducing plan preempted it, or a restart left no one waiting for it).
  *
  * CHECK constraints mirror the TypeScript unions in src/types.ts, so a status, action or risk class
  * outside the contract cannot be stored at all (an executions.action of 'withdraw' is rejected here
@@ -383,13 +385,18 @@ CREATE TRIGGER delegation_revocations_no_delete BEFORE DELETE ON delegation_revo
 BEGIN SELECT RAISE(ABORT, 'delegation revocations are append-only'); END;
 `;
 
+const V4 = `
+ALTER TABLE approvals ADD COLUMN close_reason TEXT;
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "core", sql: V1 },
   { version: 2, name: "desk", sql: V2 },
   { version: 3, name: "delegation-revocations", sql: V3 },
+  { version: 4, name: "approval-close-reason", sql: V4 },
 ];
 
-export const LATEST_SCHEMA_VERSION = 3;
+export const LATEST_SCHEMA_VERSION = 4;
 
 export function schemaVersion(db: Database.Database): number {
   return db.pragma("user_version", { simple: true }) as number;

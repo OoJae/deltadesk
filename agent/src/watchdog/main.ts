@@ -11,8 +11,28 @@
  *   baseline re-valued at today's prices (the market-explained part); the baseline rolls hourly and
  *   resets after an owner withdrawal.
  * - Revert streak: Δ operator nonce − Δ successful operator LaneActions.
- * - Foreign action: a LaneAction by the operator key whose decisionId is not an agent id.
+ * - Foreign action: a LaneAction by the operator key that the agent did not produce. First filter:
+ *   a decisionId that does not decode as the agent's layout (ULID ‖ version ‖ step). That layout
+ *   is public, so a stolen operator key can forge it: every action that passes the filter is then
+ *   cross-checked with the agent (GET /lanes/:lane/actions/:decisionId?tx=…, x-watchdog-key). The
+ *   agent persists every signature before broadcasting it, so known=false means the operator key
+ *   acted outside the agent → pause + critical alert (a false positive only costs liveness: a
+ *   pause is risk-reducing and the owner unpauses). An agent that cannot be asked (unreachable,
+ *   5xx, a refused key) → a critical alert and NO pause; the action is re-asked every tick until it
+ *   resolves. It escalates to a pause only once it has stayed unverified WATCHDOG_UNVERIFIED_MIN
+ *   while the agent is down (no /health, or a stale heartbeat), and only once per action; an alive
+ *   agent that refuses (a key mismatch) never escalates: that stays a critical alert, and a live
+ *   agent still reconciles its own LaneActions. Past MAX_UNCHECKED waiting actions, further ones
+ *   are only counted (in the alert), never made foreign. The operator's own pause() carries no Meta
+ *   and is risk-reducing: never counted. Owner and guardian actions are not cross-checked: the
+ *   owner acting is legitimate by definition, and neither key is the agent's.
  * - Dead-man: a calendar boundary (open, close, roll, reopen guard) within ±WATCHDOG_DEADMAN_MIN.
+ *
+ * A detection is never lost: a tick does every chain read before it consumes a log, and a foreign
+ * action (or a Telegram /pause) stays pending, its pause re-sent every tick, until the lane is seen
+ * paused or a guardian pause lands (a dry run reports it once). The cursor and the re-ask set live
+ * in memory: a fresh process looks back FIRST_LOOK_BACK_BLOCKS on its first tick, so actions made
+ * while it restarted are examined too; older ones are not.
  *
  * Its own Meta.decisionIds use the agent's layout, so the agent sees the watchdog's pause/exit as a
  * foreign LaneAction and drops to safe mode, as intended.
@@ -35,6 +55,7 @@ import {
 } from "../executor/decision-id.js";
 import { createFeePolicy, gasLimitFor } from "../executor/fees.js";
 import { createSimulator } from "../executor/simulate.js";
+import { WATCHDOG_KEY_HEADER } from "../http/watchdog-api.js";
 import { createLogger } from "../log.js";
 import { regimeAt } from "../market/calendar.js";
 import {
@@ -53,6 +74,7 @@ import type {
   Hex,
   LaneBudgets,
   Notifier,
+  RawLog,
   Sleep,
   UnsignedTx,
   WatchdogInput,
@@ -116,13 +138,55 @@ export function nearestScheduledAction(nowMs: number, windowMs: number): number 
   return best;
 }
 
+/** The agent's answer about one operator LaneAction (http/watchdog-api.ts). */
+export interface ActionCheck {
+  known: boolean;
+  status?: string | undefined;
+}
+
+/** Asks the agent whether it produced an action; throws when it cannot be asked or answers badly. */
+export type ActionChecker = (lane: Address, decisionId: Hex, txHash: Hex) => Promise<ActionCheck>;
+
+/** An operator LaneAction, by what the agent would be asked about. */
+interface SeenAction {
+  decisionId: Hex;
+  txHash: Hex;
+}
+
+/** An operator action waiting for the agent's answer (re-asked every tick until it resolves). */
+interface PendingCheck extends SeenAction {
+  /** When the watchdog first saw it: its unverified clock starts here. */
+  seenAtMs: number;
+  /** It already paused the lane (stale with the agent down): it never escalates again. */
+  escalated: boolean;
+}
+
 interface LaneMemory {
   cursor: bigint | null;
   operatorNonce: number | null;
   revertStreak: number;
   baseline: { amount0: bigint; amount1: bigint; navUsd: number; atMs: number } | null;
   lastAlertKey: string;
+  /**
+   * Operator actions the agent did not produce (not its layout, or disowned), by
+   * `txHash:logIndex`. Pending until the lane is paused: the pause is re-sent every tick.
+   */
+  foreign: Map<string, SeenAction>;
+  /** Operator actions the agent could not be asked about yet, by `txHash:logIndex`. */
+  unchecked: Map<string, PendingCheck>;
+  /** Actions past MAX_UNCHECKED: counted in the alert, never asked about, never foreign. */
+  untracked: number;
 }
+
+/** Bounds the re-ask set; past it, actions are only counted (the oldest keep the clock running). */
+const MAX_UNCHECKED = 256;
+/**
+ * A fresh process (first start or a restart) reads LaneActions this far back on its first tick
+ * (≈ 5 min of 4663's ~0.1 s blocks), so the actions made while it was down are examined too.
+ */
+export const FIRST_LOOK_BACK_BLOCKS = 3_000n;
+/** Blocks per eth_getLogs (the agent's reconciler uses the same bound). */
+const LOGS_CHUNK_BLOCKS = 5_000n;
 
 export interface LaneReading {
   blockNumber: bigint;
@@ -155,6 +219,8 @@ export interface WatchdogDeps {
   scheduledActionAt?: (nowMs: number) => number | null;
   /** Lane reads (tests inject); default reads the chain. */
   readLane?: (lane: Address, blockNumber: bigint) => Promise<LaneReading>;
+  /** The agent cross-check; default: createActionChecker(cfg.agentUrl, cfg.agentKey). */
+  checkAction?: ActionChecker;
 }
 
 export interface LaneReport {
@@ -288,6 +354,7 @@ export function createWatchdog(deps: WatchdogDeps) {
   const pauseRequests = new Set<string>();
   const nextUlid = createDecisionUlidFactory();
   const readLane = deps.readLane ?? createChainLaneReader(chain);
+  const checkAction = deps.checkAction ?? createActionChecker(cfg.agentUrl, cfg.agentKey);
   const scheduledAt =
     deps.scheduledActionAt ?? ((now) => nearestScheduledAction(now, cfg.thresholds.deadManMs));
   const simulator = createSimulator({ chain });
@@ -301,7 +368,16 @@ export function createWatchdog(deps: WatchdogDeps) {
   function mem(lane: Address): LaneMemory {
     let m = memory.get(lane);
     if (m === undefined) {
-      m = { cursor: null, operatorNonce: null, revertStreak: 0, baseline: null, lastAlertKey: "" };
+      m = {
+        cursor: null,
+        operatorNonce: null,
+        revertStreak: 0,
+        baseline: null,
+        lastAlertKey: "",
+        foreign: new Map(),
+        unchecked: new Map(),
+        untracked: 0,
+      };
       memory.set(lane, m);
     }
     return m;
@@ -356,6 +432,39 @@ export function createWatchdog(deps: WatchdogDeps) {
     };
   }
 
+  /** LaneAction logs in [from, to], in chunks an RPC accepts (an outage leaves a long gap). */
+  async function laneActionLogs(lane: Address, from: bigint, to: bigint): Promise<RawLog[]> {
+    const out: RawLog[] = [];
+    for (let lo = from; lo <= to; lo += LOGS_CHUNK_BLOCKS) {
+      const hi = lo + LOGS_CHUNK_BLOCKS - 1n < to ? lo + LOGS_CHUNK_BLOCKS - 1n : to;
+      out.push(
+        ...(await chain.getLogs({
+          address: lane,
+          fromBlock: lo,
+          toBlock: hi,
+          topics: [LANE_ACTION_TOPIC],
+        })),
+      );
+    }
+    return out;
+  }
+
+  /** Queue an agent-layout action for the cross-check, within MAX_UNCHECKED. */
+  function track(m: LaneMemory, key: string, p: PendingCheck) {
+    if (m.unchecked.has(key)) return;
+    if (m.unchecked.size >= MAX_UNCHECKED) {
+      // Room first from an action that already paused the lane: its escalation is spent.
+      for (const [k, q] of m.unchecked) {
+        if (q.escalated) {
+          m.unchecked.delete(k);
+          break;
+        }
+      }
+    }
+    if (m.unchecked.size < MAX_UNCHECKED) m.unchecked.set(key, p);
+    else m.untracked += 1;
+  }
+
   async function runLane(
     lane: Address,
     block: bigint,
@@ -363,32 +472,80 @@ export function createWatchdog(deps: WatchdogDeps) {
   ): Promise<LaneReport> {
     const m = mem(lane);
     const now = clock.now();
+    // Every chain read first: one that fails ends the tick before any log is consumed (the cursor
+    // and the foreign and re-ask sets move only once all of them are in).
     const reading = await readLane(lane, block);
+    const from =
+      m.cursor !== null
+        ? m.cursor + 1n
+        : block > FIRST_LOOK_BACK_BLOCKS
+          ? block - FIRST_LOOK_BACK_BLOCKS
+          : 0n;
+    const logs = from <= block ? await laneActionLogs(lane, from, block) : [];
+    const nonce = await chain.getTransactionCount(reading.operator, "latest");
 
     // LaneActions since the last look: foreign operator actions, successes, owner withdrawals.
-    let foreign = 0;
     let operatorSuccesses = 0;
     let ownerWithdrew = false;
-    if (m.cursor !== null && block > m.cursor) {
-      const logs = await chain.getLogs({
-        address: lane,
-        fromBlock: m.cursor + 1n,
-        toBlock: block,
-        topics: [LANE_ACTION_TOPIC],
-      });
-      for (const log of logs) {
-        const ev = decodeLaneAction(log);
-        if (ev.caller === reading.operator) {
-          operatorSuccesses += 1;
-          if (ev.action !== PAUSE_ACTION && tryDecodeDecisionId(ev.decisionId) === null)
-            foreign += 1;
+    for (const log of logs) {
+      const ev = decodeLaneAction(log);
+      if (ev.caller === reading.operator) {
+        operatorSuccesses += 1;
+        if (ev.action !== PAUSE_ACTION) {
+          const key = `${ev.txHash}:${ev.logIndex}`;
+          const seen = { decisionId: ev.decisionId, txHash: ev.txHash };
+          // First filter: not even the agent's layout. Otherwise ask the agent (below).
+          if (tryDecodeDecisionId(ev.decisionId) === null) m.foreign.set(key, seen);
+          else track(m, key, { ...seen, seenAtMs: now, escalated: false });
         }
-        if (ev.caller === reading.owner && OWNER_EXITS.has(ev.action)) ownerWithdrew = true;
+      }
+      if (ev.caller === reading.owner && OWNER_EXITS.has(ev.action)) ownerWithdrew = true;
+    }
+    // Never backwards: a lagging RPC would replay logs already consumed.
+    if (m.cursor === null || block > m.cursor) m.cursor = block;
+
+    // The agent cross-check: known → fine; unknown → foreign; unreachable → unverified (re-asked
+    // next tick). The first failure ends this tick's asking: an agent that is down fails them all.
+    const unknownIds: Hex[] = [];
+    for (const [key, p] of m.unchecked) {
+      let answer: ActionCheck;
+      try {
+        answer = await checkAction(lane, p.decisionId, p.txHash);
+      } catch (err) {
+        logger.warn(
+          {
+            lane,
+            decisionId: p.decisionId,
+            error: err instanceof Error ? err.message : String(err),
+          },
+          "watchdog: the agent could not vouch for an operator action",
+        );
+        break;
+      }
+      m.unchecked.delete(key);
+      if (!answer.known) {
+        m.foreign.set(key, { decisionId: p.decisionId, txHash: p.txHash });
+        unknownIds.push(p.decisionId);
       }
     }
-    m.cursor = block;
+    if (unknownIds.length > 0)
+      logger.warn(
+        { lane, decisionIds: unknownIds },
+        "watchdog: operator actions unknown to the agent",
+      );
+    if (m.unchecked.size === 0 && m.untracked > 0) {
+      // The agent answered every tracked action: the ones past the cap cannot be asked about any
+      // more (the alert counted them). Stop reporting them.
+      logger.warn(
+        { lane, untracked: m.untracked },
+        "watchdog: operator actions past the re-ask cap were never cross-checked",
+      );
+      m.untracked = 0;
+    }
+    let oldestMs: number | null = null;
+    for (const p of m.unchecked.values())
+      if (!p.escalated && (oldestMs === null || p.seenAtMs < oldestMs)) oldestMs = p.seenAtMs;
 
-    const nonce = await chain.getTransactionCount(reading.operator, "latest");
     if (m.operatorNonce !== null && nonce > m.operatorNonce) {
       const reverts = Math.max(0, nonce - m.operatorNonce - operatorSuccesses);
       m.revertStreak = operatorSuccesses > 0 ? reverts : m.revertStreak + reverts;
@@ -425,11 +582,13 @@ export function createWatchdog(deps: WatchdogDeps) {
         baselineNow === null || m.baseline === null ? null : baselineNow - m.baseline.navUsd,
       budgets: reading.budgets,
       consecutiveReverts: m.revertStreak,
-      foreignActions: foreign,
+      foreignActions: m.foreign.size,
+      unverifiedActions: m.unchecked.size + m.untracked,
+      unverifiedForMs: oldestMs === null ? null : now - oldestMs,
       operatorEthWei: reading.operatorEthWei,
       agentHealth: health,
       scheduledActionAtMs: scheduledAt(now),
-      telegramPauseRequested: pauseRequests.has(lane) || pauseRequests.has("*"),
+      telegramPauseRequested: pauseRequests.has(lane),
     };
     const verdict = evaluateWatchdog(input, cfg.thresholds);
     const report: LaneReport = { lane, verdict, actions: [] };
@@ -437,7 +596,6 @@ export function createWatchdog(deps: WatchdogDeps) {
       m.lastAlertKey = "";
       return report;
     }
-    pauseRequests.delete(lane);
     const reason = verdict.triggers.map((t) => t.trigger).join(",");
     const notGuardian = deps.guardian !== null && reading.guardian !== deps.guardian.address;
     for (const kind of plannedActions(verdict, reading)) {
@@ -461,9 +619,9 @@ export function createWatchdog(deps: WatchdogDeps) {
         });
       }
     }
-    const alertKey = `${verdict.action}|${reason}|${report.actions.map((a) => a.kind).join(",")}`;
+    // A failed action is part of the key: its retry landing is news, the same failure again is not.
+    const alertKey = `${verdict.action}|${reason}|${report.actions.map((a) => (a.error === null ? a.kind : `${a.kind}!`)).join(",")}`;
     if (alertKey !== m.lastAlertKey) {
-      m.lastAlertKey = alertKey;
       await deps.notifier.notify({
         kind: "watchdog",
         severity: "critical",
@@ -472,12 +630,30 @@ export function createWatchdog(deps: WatchdogDeps) {
         title: `Watchdog: ${verdict.action.replaceAll("_", " ")}${cfg.dryRun ? " (DRY RUN)" : ""}`,
         lines: [
           ...verdict.triggers.map((t) => `${t.trigger}: ${t.detail}`),
+          ...[...m.foreign.values()].slice(0, 3).map((f) => `foreign tx: ${f.txHash}`),
           ...report.actions.map(
             (a) => `${a.kind}: ${a.txHash ?? (a.dryRun ? "dry run" : (a.error ?? "not sent"))}`,
           ),
         ],
         dryRun: cfg.dryRun,
       });
+      m.lastAlertKey = alertKey; // only once sent: a notifier that throws is retried next tick
+    }
+    // The one-shot pause reasons (a foreign action, a Telegram /pause, a stale unverified action)
+    // settle once the lane is paused: seen paused, or a guardian pause landed (a dry run's "would
+    // send" counts: there is nothing to retry). Until then the pause is re-sent every tick.
+    const paused =
+      reading.paused ||
+      report.actions.some(
+        (a) => a.kind === "pause" && a.error === null && (a.dryRun || a.txHash !== null),
+      );
+    if (paused) {
+      m.foreign.clear();
+      pauseRequests.delete(lane);
+      if (verdict.triggers.some((t) => t.trigger === "unverified-stale")) {
+        for (const p of m.unchecked.values())
+          if (now - p.seenAtMs >= cfg.thresholds.unverifiedMaxMs) p.escalated = true;
+      }
     }
     return report;
   }
@@ -492,8 +668,11 @@ export function createWatchdog(deps: WatchdogDeps) {
     async runOnce(): Promise<LaneReport[]> {
       const block = await chain.blockNumber();
       const health = await deps.fetchHealth().catch(() => null);
+      const lanes = cfg.lanes.map((l) => l.toLowerCase() as Address);
+      // "/pause" for every lane: one request per lane, each kept until that lane is paused.
+      if (pauseRequests.delete("*")) for (const lane of lanes) pauseRequests.add(lane);
       const out: LaneReport[] = [];
-      for (const lane of cfg.lanes.map((l) => l.toLowerCase() as Address)) {
+      for (const lane of lanes) {
         try {
           out.push(await runLane(lane, block, health));
         } catch (err) {
@@ -503,7 +682,6 @@ export function createWatchdog(deps: WatchdogDeps) {
           );
         }
       }
-      pauseRequests.delete("*");
       return out;
     },
     start() {
@@ -527,6 +705,45 @@ export function createWatchdog(deps: WatchdogDeps) {
     },
   };
   return watchdog;
+}
+
+/**
+ * GET {agentUrl}/lanes/:lane/actions/:decisionId?tx=… with x-watchdog-key. Throws (→ unverified: an
+ * alert, a pause only once stale with the agent down) when unconfigured, unreachable, on any
+ * non-200, or on a malformed body.
+ */
+export function createActionChecker(
+  agentUrl: string | undefined,
+  agentKey: string | undefined,
+  timeoutMs = 5_000,
+): ActionChecker {
+  return async (lane, decisionId, txHash) => {
+    if (agentUrl === undefined || agentKey === undefined)
+      throw new Error("no agent to ask (WATCHDOG_AGENT_URL / WATCHDOG_AGENT_KEY unset)");
+    const url = `${agentUrl.replace(/\/+$/, "")}/lanes/${lane}/actions/${decisionId}?tx=${txHash}`;
+    const res = await fetch(url, {
+      headers: { [WATCHDOG_KEY_HEADER]: agentKey },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (res.status !== 200) throw new Error(`agent answered HTTP ${res.status}`);
+    const body = (await res.json()) as { known?: unknown; status?: unknown };
+    if (typeof body.known !== "boolean") throw new Error("agent answered without `known`");
+    return {
+      known: body.known,
+      status: typeof body.status === "string" ? body.status : undefined,
+    };
+  };
+}
+
+/** What a configuration that runs, but watches less than it could, says at startup. */
+export function watchdogStartupWarnings(cfg: WatchdogConfig): string[] {
+  const out: string[] = [];
+  if (cfg.agentUrl === undefined) {
+    out.push(
+      "WATCHDOG_AGENT_URL is unset (dry run only): no operator LaneAction can be cross-checked with the agent (each one alerts as unverified, and escalates after WATCHDOG_UNVERIFIED_MIN), and the agent's /health reads as down",
+    );
+  }
+  return out;
 }
 
 export function createHealthFetcher(
@@ -553,6 +770,7 @@ async function main(): Promise<void> {
   const cfg = loadWatchdogConfig(process.env);
   const logger = createLogger({ level: cfg.logLevel, service: "desk-watchdog" });
   if (cfg.lanes.length === 0) throw new Error("the watchdog needs DESK_LANE_A and/or DESK_LANE_B");
+  for (const warning of watchdogStartupWarnings(cfg)) logger.warn({}, warning);
   const chain = createChainClient({ rpcUrl: cfg.rpcUrl, chainId: cfg.chainId });
   const rpcChainId = await chain.chainId();
   if (rpcChainId !== cfg.chainId)
@@ -604,7 +822,13 @@ async function main(): Promise<void> {
     );
   }
   logger.info(
-    { lanes: cfg.lanes, guardian: guardian?.address ?? null, dryRun: cfg.dryRun, armed: cfg.armed },
+    {
+      lanes: cfg.lanes,
+      guardian: guardian?.address ?? null,
+      dryRun: cfg.dryRun,
+      armed: cfg.armed,
+      firstLookBackBlocks: Number(FIRST_LOOK_BACK_BLOCKS),
+    },
     "desk-watchdog started",
   );
   watchdog.start();

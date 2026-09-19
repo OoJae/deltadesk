@@ -41,6 +41,7 @@ describe("log redaction", () => {
         headers: {
           authorization: "Bearer jwt-secret",
           "x-deltadesk-key": "premium-secret",
+          "x-watchdog-key": "watchdog-header-secret",
           "x-dynamic-signature-256": "sha256=ok",
         },
         req: { headers: { authorization: "Bearer jwt-secret-2", cookie: "sid=cookie-secret" } },
@@ -48,7 +49,13 @@ describe("log redaction", () => {
       "request",
     );
     const out = lines.join("");
-    for (const s of ["jwt-secret", "premium-secret", "jwt-secret-2", "cookie-secret"])
+    for (const s of [
+      "jwt-secret",
+      "premium-secret",
+      "watchdog-header-secret",
+      "jwt-secret-2",
+      "cookie-secret",
+    ])
       expect(out).not.toContain(s);
     expect(out).toContain("sha256=ok"); // a signature is not a secret
   });
@@ -66,6 +73,7 @@ describe("log redaction", () => {
       TELEGRAM_BOT_TOKEN: "123:tgsecret",
       DELTADESK_API_KEY: "premium_secret",
       DESK_AGENT_API_KEY: "agent-key-secret-0123456789",
+      WATCHDOG_AGENT_KEY: "watchdog-key-secret-0123456789abcdef",
     });
     logger.info({ config: cfg }, "config");
     const out = lines.join("");
@@ -79,6 +87,7 @@ describe("log redaction", () => {
       "tgsecret",
       "premium_secret",
       "agent-key-secret-0123456789",
+      "watchdog-key-secret-0123456789abcdef",
     ]) {
       expect(out, s).not.toContain(s);
     }

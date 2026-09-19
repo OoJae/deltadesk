@@ -1388,6 +1388,7 @@ export function createDaemon(deps: DaemonDeps): Daemon {
         ctx.decisionId,
         outcome === "timeout" ? "expired" : "cancelled",
         clock.now(),
+        why,
       );
     } catch (err) {
       p.log.warn({ error: errText(err) }, "approval row not closed");

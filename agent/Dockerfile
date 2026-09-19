@@ -10,8 +10,11 @@
 # Or run either service from the default image with DESK_SERVICE=desk-agent|watchdog (Railway: one
 # image, a different variable per service). One-off scripts: override the command, e.g.
 #   docker run --rm -v desk-data:/data deltadesk-agent node --import tsx scripts/status.ts
+#   docker run --rm --platform linux/amd64 deltadesk-agent node scripts/native-check.mjs
 
-ARG NODE_VERSION=24
+# Node 26 on Debian bookworm slim (glibc 2.36). Never alpine/musl: the Dynamic MPC addon ships
+# glibc builds only (libmpc_executor_linux_{x86_64,arm64}_nodejs.node).
+ARG NODE_VERSION=26
 
 # ---- dependencies (native addons: better-sqlite3 and the Dynamic MPC addon, glibc) -------------
 FROM node:${NODE_VERSION}-bookworm-slim AS deps
@@ -23,8 +26,10 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 # The full install keeps tsx (the runtime loader). Only the allowlisted packages run build scripts.
 RUN CI=true pnpm install --frozen-lockfile
-# Fail the build, not the boot, if a native addon did not land for this platform.
-RUN node -e "new (require('better-sqlite3'))(':memory:').prepare('select 1').get()"
+# Fail the build, not the boot, if a native addon did not land for this platform: load AND exercise
+# better-sqlite3 and the Dynamic MPC addon (offline), and list every .node file mapped.
+COPY scripts/native-check.mjs ./scripts/native-check.mjs
+RUN node scripts/native-check.mjs
 
 # ---- runtime ------------------------------------------------------------------------------------
 FROM node:${NODE_VERSION}-bookworm-slim AS runtime
@@ -39,6 +44,8 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY package.json tsconfig.json ./
 COPY src ./src
 COPY scripts ./scripts
+# Again in the runtime image (no build toolchain here): the addons must load where they will run.
+RUN node scripts/native-check.mjs
 # `node --import tsx` (not the tsx CLI): signals reach the process that drains the tick and
 # releases the daemon lock.
 RUN printf '%s\n' \

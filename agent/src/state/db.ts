@@ -384,6 +384,7 @@ const APPROVALS: TableSpec<ApprovalRow> = {
     channel: ["channel", "s"],
     respondedAtMs: ["responded_at_ms", "n"],
     respondedBy: ["responded_by", "s"],
+    closeReason: ["close_reason", "s"],
   },
 };
 
@@ -595,6 +596,13 @@ export function openDb(path: string, opts: OpenDbOptions = {}): DeskDbHandle {
       return one(
         DELEGATIONS,
         "SELECT * FROM delegations WHERE account_address = ? AND status = 'active' ORDER BY updated_at_ms DESC LIMIT 1",
+        lower(address),
+      );
+    },
+    latestDelegationByAddress(address) {
+      return one(
+        DELEGATIONS,
+        "SELECT * FROM delegations WHERE account_address = ? ORDER BY updated_at_ms DESC, created_at_ms DESC LIMIT 1",
         lower(address),
       );
     },
@@ -1074,7 +1082,14 @@ export function openDb(path: string, opts: OpenDbOptions = {}): DeskDbHandle {
     createApproval(row) {
       insertRow(
         APPROVALS,
-        { ...row, status: "pending", channel: null, respondedAtMs: null, respondedBy: null },
+        {
+          ...row,
+          status: "pending",
+          channel: null,
+          respondedAtMs: null,
+          respondedBy: null,
+          closeReason: null,
+        },
         " ON CONFLICT(decision_id) DO NOTHING",
       );
     },
@@ -1090,11 +1105,38 @@ export function openDb(path: string, opts: OpenDbOptions = {}): DeskDbHandle {
           .changes > 0
       );
     },
-    closeApproval(decisionId, status, nowMs) {
+    closeApproval(decisionId, status, nowMs, reason) {
       prep(
-        "UPDATE approvals SET status = ?, responded_at_ms = ? WHERE decision_id = ? AND status = 'pending'",
-      ).run(status, nowMs, decisionId);
+        "UPDATE approvals SET status = ?, responded_at_ms = ?, close_reason = ? WHERE decision_id = ? AND status = 'pending'",
+      ).run(status, nowMs, reason ?? null, decisionId);
       return handle.getApproval(decisionId);
+    },
+    closeOrphanedApprovals(reason, nowMs) {
+      return tx(() => {
+        const pending = all(APPROVALS, "SELECT * FROM approvals WHERE status = 'pending'");
+        const closed: ApprovalRow[] = [];
+        for (const a of pending) {
+          const expired = a.expiresAtMs <= nowMs;
+          const row = handle.closeApproval(
+            a.decisionId,
+            expired ? "expired" : "cancelled",
+            nowMs,
+            reason,
+          );
+          if (row !== null) closed.push(row);
+          const d = handle.getDecision(a.decisionId);
+          if (d !== null && d.status === "observed") {
+            handle.updateDecision(a.decisionId, {
+              status: "declined",
+              approvalOutcome: expired ? "timeout" : "cancelled",
+              approvalChannel: null,
+              statusDetail: `approval closed at startup: ${reason}`,
+              updatedAtMs: nowMs,
+            });
+          }
+        }
+        return closed;
+      });
     },
     pendingApprovals(laneAddress, nowMs) {
       return all(

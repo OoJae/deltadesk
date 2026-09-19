@@ -287,7 +287,12 @@ export class Fork {
     }
   }
 
-  async send(key: Hex, to: Address, data: Hex): Promise<void> {
+  /** Send and wait for success; returns the receipt (gas measurements read `gasUsed`). */
+  async send(
+    key: Hex,
+    to: Address,
+    data: Hex,
+  ): Promise<Awaited<ReturnType<PublicClient["waitForTransactionReceipt"]>>> {
     const account = privateKeyToAccount(key);
     const wallet = createWalletClient({
       account,
@@ -303,6 +308,7 @@ export class Fork {
       throw err;
     }
     if (r.status !== "success") throw new Error(`tx to ${to} reverted`);
+    return r;
   }
 
   /**
@@ -603,7 +609,9 @@ export function offChain(clock: Clock): OffChain {
       };
     },
   };
-  // A generous fee record: the fork scenarios exercise the wiring, not the M1 economics.
+  // A generous fee record: the fork scenarios exercise the wiring, not the M1 economics. With the
+  // engine's REAL hour-of-week record a ~$50 lane never clears the 2x cost hurdle after its initial
+  // mint (test/unit/strategy/economics.test.ts; agent/README.md "Economics at M2 size").
   const record: HourRecord = { fees_usd: 5e8, swaps: 1000, edge_1h: 1 };
   const engine: EngineSource = {
     async basis(): Promise<BasisK> {
@@ -821,7 +829,7 @@ export async function setupLane(
 }
 
 /** Guard violations that only mean "the fork answered slowly" (cold upstream state), never policy. */
-function coldForkOnly(d: DeskUnderTest, decisionId: string): boolean {
+export function coldForkOnly(d: DeskUnderTest, decisionId: string): boolean {
   const raw = d.db.getDecision(decisionId)?.guardViolationsJson ?? "[]";
   const vs = JSON.parse(raw) as Array<{ rule: string; detail: string }>;
   return (

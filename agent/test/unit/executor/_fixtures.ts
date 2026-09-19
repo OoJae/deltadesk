@@ -107,6 +107,75 @@ export function seedDecision(db: DeskDb, partial: Partial<DecisionRow> = {}): st
   return id;
 }
 
+/**
+ * A decision with one execution whose bytes were signed and persisted (status `signed`), as the
+ * executor leaves it right before its broadcast. `broadcast` marks one send.
+ */
+export async function seedSignedExecution(
+  db: DeskDb,
+  opts: {
+    riskClass?: "adding" | "reducing";
+    nonce?: number;
+    deadlineSec?: number;
+    broadcast?: boolean;
+    lane?: Address;
+  } = {},
+) {
+  const adding = opts.riskClass === "adding";
+  const lane = (opts.lane ?? LANE).toLowerCase() as Address;
+  const decisionId = seedDecision(db, { laneAddress: lane });
+  const onchainId = encodeDecisionId(decisionId, 0);
+  const executionId = db.insertExecution({
+    decisionId,
+    stepIndex: 0,
+    onchainId,
+    laneAddress: lane,
+    venue: "rh",
+    action: adding ? "rerange" : "collect",
+    riskClass: adding ? "adding" : "reducing",
+    notionalCents: adding ? 5_000 : 0,
+    signerAddress: OPERATOR_ADDR,
+    status: "prepared",
+    createdAtMs: T0,
+    updatedAtMs: T0,
+  });
+  const data: Hex = adding ? "0x5b1a2c3d" : "0xa64dfc1f";
+  const raw = await localSigner().signTransaction({
+    type: "eip1559",
+    chainId: 4663,
+    to: lane,
+    data,
+    value: 0n,
+    nonce: opts.nonce ?? 0,
+    gas: 200_000n,
+    maxFeePerGas: 20_000_000n,
+    maxPriorityFeePerGas: 0n,
+  });
+  const txHash = keccak256(raw);
+  db.recordSignedAttempt(
+    {
+      executionId,
+      attempt: 1,
+      signerKind: "local",
+      fromAddress: OPERATOR_ADDR,
+      toAddress: lane,
+      calldataHash: keccak256(data),
+      nonce: opts.nonce ?? 0,
+      gasLimit: 200_000n,
+      maxFeePerGas: 20_000_000n,
+      maxPriorityFeePerGas: 0n,
+      deadlineSec: opts.deadlineSec ?? Math.floor(T0 / 1000) + 45,
+      signedRawTx: raw,
+      txHash,
+      simJson: null,
+      createdAtMs: T0,
+    },
+    T0,
+  );
+  if (opts.broadcast === true) db.markAttemptBroadcast(txHash, T0);
+  return { decisionId, executionId, onchainId, raw, txHash };
+}
+
 export function metaFor(ulid: string, step: number, deadlineSec: number) {
   return {
     decisionId: encodeDecisionId(ulid, step),

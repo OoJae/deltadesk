@@ -115,7 +115,12 @@ export function createApprovalGate(opts: ApprovalGateOptions): ApprovalGate {
       const signal = poll(req);
       if (signal !== null) return { signal, timedOut: false };
       if (waited >= req.windowMs) {
-        opts.db?.closeApproval(req.decisionId, "expired", clock.now());
+        opts.db?.closeApproval(
+          req.decisionId,
+          "expired",
+          clock.now(),
+          "no answer within the window",
+        );
         return { signal: null, timedOut: true };
       }
       const step = Math.min(pollMs, req.windowMs - waited);

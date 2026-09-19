@@ -11,7 +11,7 @@ import {
 } from "../../../src/http/dynamic-webhook.js";
 import { silentLogger } from "../../../src/log.js";
 import { createVault, VAULT_PURPOSE } from "../../../src/signer/vault.js";
-import type { DeskDb, DeskNotification, Hex } from "../../../src/types.js";
+import type { DeskDb, DeskNotification } from "../../../src/types.js";
 import { fixedClock, memDb } from "../../helpers/fakes.js";
 import { deskRow, LANE, OPERATOR_ADDR, OWNER } from "../executor/_fixtures.js";
 import { ENV_ID, encryptForDynamic, rsaKeyPair } from "./_http.js";
@@ -425,20 +425,32 @@ describe("a lane OWNER is never stored, registered desk or not", () => {
     expect(s.db.getDelegation("wallet-op-1")?.status).toBe("active");
   });
 
-  it("factoryLaneOwnerProbe reads lanesOf(wallet) on the configured factory", async () => {
+  it("factoryLaneOwnerProbe: a lane listed under the wallet (lanesOf + listed, one pinned block)", async () => {
     const FACTORY = "0x5555555555555555555555555555555555555555" as const;
-    const calls: Array<{ to: string; data: Hex }> = [];
+    const OTHER_LANE = "0x6666666666666666666666666666666666666666" as const;
+    const calls: Array<{ to: string; fn: string; block: bigint | undefined }> = [];
+    // lanesOf(OWNER) = [LANE] (listed); lanesOf(OPERATOR) = [OTHER_LANE] whose listed() is false
+    // (a factory whose lanesOf is not trustworthy on its own: the probe checks listed too).
     const probe = factoryLaneOwnerProbe(
       {
         blockNumber: async () => 7n,
         call: async (req) => {
-          calls.push({ to: req.to, data: req.data });
-          const { args } = decodeFunctionData({ abi: deskLaneFactoryAbi, data: req.data });
-          const owns = String(args?.[0] ?? "").toLowerCase() === OWNER;
+          const { functionName, args } = decodeFunctionData({
+            abi: deskLaneFactoryAbi,
+            data: req.data,
+          });
+          calls.push({ to: req.to, fn: functionName, block: req.blockNumber });
+          const arg = String(args?.[0] ?? "").toLowerCase();
+          if (functionName === "listed")
+            return encodeFunctionResult({
+              abi: deskLaneFactoryAbi,
+              functionName,
+              result: arg === LANE,
+            });
           return encodeFunctionResult({
             abi: deskLaneFactoryAbi,
             functionName: "lanesOf",
-            result: owns ? [LANE] : [],
+            result: arg === OWNER ? [LANE] : arg === OPERATOR_ADDR ? [OTHER_LANE] : [],
           });
         },
       },
@@ -446,6 +458,8 @@ describe("a lane OWNER is never stored, registered desk or not", () => {
     );
     expect(await probe(OWNER)).toBe(true);
     expect(await probe(OPERATOR_ADDR)).toBe(false);
-    expect(calls.every((c) => c.to.toLowerCase() === FACTORY)).toBe(true);
+    expect(await probe("0x7777777777777777777777777777777777777777")).toBe(false);
+    expect(calls.every((c) => c.to.toLowerCase() === FACTORY && c.block === 7n)).toBe(true);
+    expect(calls.filter((c) => c.fn === "listed")).toHaveLength(2);
   });
 });

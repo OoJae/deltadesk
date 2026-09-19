@@ -5,7 +5,8 @@
  *   1 config (loadConfig refuses unsafe combinations) and the logger
  *   2 the SQLite store (WAL, migrations) and the single-instance daemon lock
  *   3 the RPC's chain id, then startup reconciliation: unsigned executions fail, signed bytes are
- *     rebroadcast (never re-signed), decisions stranded in `executing` are resolved
+ *     rebroadcast (never re-signed; a risk-adding one only while its desk is still active),
+ *     decisions stranded in `executing` are resolved, approvals left pending are closed
  *   4 sensors (HL websocket, Robinhood, engine) and the lanes: each configured lane is preflighted
  *     (identity, pool, signer = operator ≠ owner, config caps within the on-chain caps) and
  *     registered as a desk; desks registered later through the web API are preflighted on the
@@ -67,7 +68,11 @@ import {
   createTelegramNotifier,
 } from "./notify/telegram.js";
 import { createLaneActionReconciler } from "./reconcile/lane-actions.js";
-import { createAttemptResolver, createStartupReconciler } from "./reconcile/startup.js";
+import {
+  closeOrphanedApprovals,
+  createAttemptResolver,
+  createStartupReconciler,
+} from "./reconcile/startup.js";
 import { createChainReader } from "./sense/chain.js";
 import { createEngineSource, type EngineSourceHandle } from "./sense/engine.js";
 import { createHlFeed } from "./sense/hyperliquid.js";
@@ -405,6 +410,9 @@ export async function main(): Promise<void> {
     if (live) {
       assertRpcChainId(cfg, await chain.chainId());
       await createStartupReconciler(resolverDeps).run(clock.now());
+    } else {
+      // No chain to reconcile, but a pending approval's waiter still died with the last process.
+      closeOrphanedApprovals({ db, logger }, clock.now());
     }
 
     // 4. Sensors and lanes.
@@ -733,8 +741,14 @@ export async function main(): Promise<void> {
         logger,
         notifier,
       },
+      watchdog: { db, key: cfg.http.watchdogKey, logger },
       logger,
     });
+    if (cfg.http.watchdogKey === undefined)
+      logger.warn(
+        {},
+        "WATCHDOG_AGENT_KEY is unset: the watchdog cannot cross-check operator LaneActions (it alerts on each)",
+      );
     const server = await startHttpServer(app, { port: cfg.http.port, host: cfg.http.host });
     cleanups.push(() => server.close());
     logger.info({ port: server.port }, "http server listening");
