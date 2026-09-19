@@ -20,7 +20,7 @@ Fill every `{{…}}` placeholder before pasting. [`docs/m2-desk.md`](m2-desk.md)
 | **Demo plans** | choice | **Recorded demo only (online submission)** |
 | **Repository link** | URL | https://github.com/OoJae/deltadesk (it must be public; the Uniswap track requires it) |
 | **Demo video link** | URL | https://youtu.be/pjpZgsKzxQY (required for a recorded submission) |
-| **Project post on X (Twitter)** | a status URL | {{X_POST_URL}}, the first post of [notes/x-thread.md](notes/x-thread.md). A profile link is rejected. |
+| **Project post on X (Twitter)** | a status URL | https://x.com/_OoJae/status/2101447648234635684, the first post of [notes/x-thread.md](notes/x-thread.md). A profile link is rejected. |
 | **Pitch deck link** | URL | optional; leave blank, or {{DECK_URL}} |
 | **Prize entries** | multi-select | ☑ **Dynamic** ☑ **Uniswap**. Bankr is added automatically. Leave Definitive Flash, Grok Bot and Blackbird unchecked. |
 
@@ -93,7 +93,7 @@ The handbook asks for five things. Here is where each one is:
 - **One-liner:** The open market-making desk for tokenized stocks: public books for every LP, and a desk that runs
   your lane through a delegated agent that can only ever pay you.
 - **Problem:** LPs in tokenized-stock pools are market makers without books.
-  - In NVDA/USDG, informed flow took back $289.5k of $362.9k in fees.
+  - In NVDA/USDG, informed flow took back $289.1k of $367.3k in fees.
   - Most of that went at predictable hours and to three operators.
   - No public tool we found showed LPs this, position by position.
 - **Solution:**
