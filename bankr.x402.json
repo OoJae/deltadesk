@@ -6,26 +6,69 @@
       "description": "Should you provide liquidity to this tokenized-stock pool right now? ALLOW / CAUTION / BLOCK with reasons: gap between the pool price and Hyperliquid-derived fair value, market regime (open, overnight, weekend dark window, reopen), and the pool's historical LP edge for this hour of the week. Robinhood Chain Uniswap pools: NVDA, SPY, TSLA, QQQ-SPY.",
       "price": "0.005",
       "paymentScheme": "exact",
-      "methods": ["GET"],
+      "methods": [
+        "GET"
+      ],
       "category": "data",
-      "tags": ["tokenized-stocks", "liquidity", "uniswap", "risk", "robinhood-chain", "lp"],
+      "tags": [
+        "tokenized-stocks",
+        "liquidity",
+        "uniswap",
+        "risk",
+        "robinhood-chain",
+        "lp"
+      ],
       "schema": {
         "input": {
           "type": "object",
           "properties": {
-            "pool": { "type": "string", "description": "Pool: NVDA, SPY, TSLA or QQQ-SPY", "enum": ["NVDA", "SPY", "TSLA", "QQQ-SPY"] }
+            "pool": {
+              "type": "string",
+              "description": "Pool: NVDA, SPY, TSLA or QQQ-SPY",
+              "enum": [
+                "NVDA",
+                "SPY",
+                "TSLA",
+                "QQQ-SPY"
+              ]
+            }
           },
-          "required": ["pool"]
+          "required": [
+            "pool"
+          ]
         },
         "output": {
           "type": "object",
           "properties": {
-            "verdict": { "type": "string", "enum": ["ALLOW", "CAUTION", "BLOCK"], "description": "Recommendation for adding liquidity now" },
-            "reasons": { "type": "array", "description": "Why, each with a level and a human-readable reason" },
-            "gap_bps": { "type": "number", "description": "ln(fair value / pool mid) in basis points" },
-            "fair_value": { "type": "number", "description": "Hyperliquid-derived fair value per pool token" },
-            "pool_mid": { "type": "number", "description": "Current pool mid price" },
-            "regime": { "type": "string", "description": "REGULAR, EXTENDED, OVERNIGHT, WEEKEND_DARK or HOLIDAY" }
+            "verdict": {
+              "type": "string",
+              "enum": [
+                "ALLOW",
+                "CAUTION",
+                "BLOCK"
+              ],
+              "description": "Recommendation for adding liquidity now"
+            },
+            "reasons": {
+              "type": "array",
+              "description": "Why, each with a level and a human-readable reason"
+            },
+            "gap_bps": {
+              "type": "number",
+              "description": "ln(fair value / pool mid) in basis points"
+            },
+            "fair_value": {
+              "type": "number",
+              "description": "Hyperliquid-derived fair value per pool token"
+            },
+            "pool_mid": {
+              "type": "number",
+              "description": "Current pool mid price"
+            },
+            "regime": {
+              "type": "string",
+              "description": "REGULAR, EXTENDED, OVERNIGHT, WEEKEND_DARK or HOLIDAY"
+            }
           }
         }
       }
@@ -34,74 +77,179 @@
       "description": "24/7 fair value for a Robinhood Chain tokenized stock pool from Hyperliquid trade.xyz prices (basis-calibrated for the token's corporate-action multiplier), versus the pool mid and the Chainlink feed (which freezes on weekends).",
       "price": "0.002",
       "paymentScheme": "exact",
-      "methods": ["GET"],
+      "methods": [
+        "GET"
+      ],
       "category": "data",
-      "tags": ["tokenized-stocks", "oracle", "fair-value", "hyperliquid", "weekend"],
+      "tags": [
+        "tokenized-stocks",
+        "oracle",
+        "fair-value",
+        "hyperliquid",
+        "weekend"
+      ],
       "schema": {
         "input": {
           "type": "object",
           "properties": {
-            "pool": { "type": "string", "description": "Pool: NVDA, SPY, TSLA or QQQ-SPY", "enum": ["NVDA", "SPY", "TSLA", "QQQ-SPY"] }
+            "pool": {
+              "type": "string",
+              "description": "Pool: NVDA, SPY, TSLA or QQQ-SPY",
+              "enum": [
+                "NVDA",
+                "SPY",
+                "TSLA",
+                "QQQ-SPY"
+              ]
+            }
           },
-          "required": ["pool"]
+          "required": [
+            "pool"
+          ]
         },
         "output": {
           "type": "object",
           "properties": {
-            "fair_value": { "type": "number", "description": "Fair value per pool token" },
-            "pool_mid": { "type": "number", "description": "Pool mid price" },
-            "gap_bps": { "type": "number", "description": "ln(fair/pool) in bp" },
-            "chainlink": { "type": "object", "description": "Latest Chainlink price and its age in seconds" }
+            "fair_value": {
+              "type": "number",
+              "description": "Fair value per pool token"
+            },
+            "pool_mid": {
+              "type": "number",
+              "description": "Pool mid price"
+            },
+            "gap_bps": {
+              "type": "number",
+              "description": "ln(fair/pool) in bp"
+            },
+            "chainlink": {
+              "type": "object",
+              "description": "Latest Chainlink price and its age in seconds"
+            }
           }
         }
       }
     },
     "pool-toxicity": {
-      "description": "How much informed flow a tokenized-stock pool's LPs face: historical LP edge (fees ÷ value picked off) by market regime and hour of the week, and the current hour's record. From every swap since the pool launched.",
+      "description": "How much informed flow a tokenized-stock pool's LPs face: historical LP edge (fees \u00f7 value picked off) by market regime and hour of the week, and the current hour's record. From every swap since the pool launched.",
       "price": "0.01",
       "paymentScheme": "exact",
-      "methods": ["GET"],
+      "methods": [
+        "GET"
+      ],
       "category": "data",
-      "tags": ["tokenized-stocks", "lvr", "markout", "analytics", "uniswap"],
+      "tags": [
+        "tokenized-stocks",
+        "lvr",
+        "markout",
+        "analytics",
+        "uniswap"
+      ],
       "schema": {
         "input": {
           "type": "object",
           "properties": {
-            "pool": { "type": "string", "description": "Pool: NVDA, SPY, TSLA or QQQ-SPY", "enum": ["NVDA", "SPY", "TSLA", "QQQ-SPY"] }
+            "pool": {
+              "type": "string",
+              "description": "Pool: NVDA, SPY, TSLA or QQQ-SPY",
+              "enum": [
+                "NVDA",
+                "SPY",
+                "TSLA",
+                "QQQ-SPY"
+              ]
+            }
           },
-          "required": ["pool"]
+          "required": [
+            "pool"
+          ]
         },
         "output": {
           "type": "object",
           "properties": {
-            "by_regime": { "type": "array", "description": "Fees, picked-off value and edge per market regime" },
-            "worst_hours_of_week": { "type": "array", "description": "Hours of the week where LPs lose the most" },
-            "current_hour": { "type": "object", "description": "This hour's historical LP record" }
+            "by_regime": {
+              "type": "array",
+              "description": "Fees, picked-off value and edge per market regime"
+            },
+            "worst_hours_of_week": {
+              "type": "array",
+              "description": "Hours of the week where LPs lose the most"
+            },
+            "current_hour": {
+              "type": "object",
+              "description": "This hour's historical LP record"
+            }
           }
         }
       }
     },
     "tearsheet": {
-      "description": "LP tearsheet for any wallet in Robinhood Chain stock pools: fees earned, value picked off by informed flow (LVR), impermanent loss vs holding, price P&L, gas and net, per position and in total, with a reconciliation line against on-chain collected fees.",
+      "description": "LP tearsheet for any wallet in tokenized-stock pools: Robinhood Chain (Uniswap v3/v4 NVDA, SPY, TSLA, QQQ/SPY) or Base (Aerodrome NVDAc/USDC, staked and unstaked). Fees kept, AERO emissions, value picked off by informed flow (vs Hyperliquid), impermanent loss vs holding, price P&L, gas and net, per position and in total, reconciled against on-chain collected fees.",
       "price": "0.05",
       "paymentScheme": "exact",
-      "methods": ["GET"],
+      "methods": [
+        "GET"
+      ],
       "category": "data",
-      "tags": ["tokenized-stocks", "lp", "pnl", "tearsheet", "uniswap", "robinhood-chain"],
+      "tags": [
+        "aerodrome",
+        "base",
+        "lp",
+        "pnl",
+        "robinhood-chain",
+        "tearsheet",
+        "tokenized-stocks",
+        "uniswap"
+      ],
       "schema": {
         "input": {
           "type": "object",
           "properties": {
-            "wallet": { "type": "string", "description": "0x address of the LP wallet" },
-            "chain": { "type": "string", "description": "Chain", "enum": ["robinhood"] }
+            "wallet": {
+              "type": "string",
+              "description": "0x address of the LP wallet"
+            },
+            "chain": {
+              "type": "string",
+              "description": "robinhood (Uniswap on Robinhood Chain, default) or base (Aerodrome)",
+              "enum": [
+                "robinhood",
+                "base"
+              ]
+            },
+            "role": {
+              "type": "string",
+              "description": "owner (positions the wallet holds), operator (positions it manages), or auto",
+              "enum": [
+                "auto",
+                "owner",
+                "operator"
+              ]
+            }
           },
-          "required": ["wallet"]
+          "required": [
+            "wallet"
+          ]
         },
         "output": {
           "type": "object",
           "properties": {
-            "totals": { "type": "object", "description": "Fees, LVR, IL, price P&L, gas, net, residual" },
-            "positions": { "type": "array", "description": "Per-position breakdown" }
+            "summary": {
+              "type": "object",
+              "description": "Totals: fees, AERO (Base), value picked off, IL, price P&L, gas, net, vs-holding, per $1k, reconciliation residual"
+            },
+            "by_regime": {
+              "type": "array",
+              "description": "Fees vs value picked off by market regime (regular, extended, overnight, weekend, holiday)"
+            },
+            "by_pool": {
+              "type": "array",
+              "description": "Per-pool totals"
+            },
+            "positions": {
+              "type": "array",
+              "description": "Per-position breakdown"
+            }
           }
         }
       }
@@ -110,20 +258,33 @@
       "description": "Leaderboard of LP wallets in Robinhood Chain tokenized-stock pools ranked by net edge per $1k per day, with strategy fingerprints (range width, rebalance frequency, weekend presence, JIT).",
       "price": "0.02",
       "paymentScheme": "exact",
-      "methods": ["GET"],
+      "methods": [
+        "GET"
+      ],
       "category": "data",
-      "tags": ["tokenized-stocks", "leaderboard", "lp", "uniswap"],
+      "tags": [
+        "tokenized-stocks",
+        "leaderboard",
+        "lp",
+        "uniswap"
+      ],
       "schema": {
         "input": {
           "type": "object",
           "properties": {
-            "limit": { "type": "number", "description": "Rows to return (default 50, max 200)" }
+            "limit": {
+              "type": "number",
+              "description": "Rows to return (default 50, max 200)"
+            }
           }
         },
         "output": {
           "type": "object",
           "properties": {
-            "rows": { "type": "array", "description": "Ranked LP wallets" }
+            "rows": {
+              "type": "array",
+              "description": "Ranked LP wallets"
+            }
           }
         }
       }
