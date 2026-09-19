@@ -87,6 +87,7 @@ uv run python -m indexer.hs_backfill && uv run python -m indexer.hl_candles
 uv run python -m markout.study && uv run python -m markout.hl_ref
 uv run python -m positions.attribute && uv run python -m league.build
 uv run python -m flow.xray && uv run python -m backtest.gap_exclusion
+uv run python -m aero.study && uv run python -m aero.positions        # Base / Aerodrome
 uv run python -m pytest tests -q  # 131 tests
 uv run uvicorn api.app:app --port 8787
 cd ../web && npm i && DELTADESK_API=http://127.0.0.1:8787 npm run dev
