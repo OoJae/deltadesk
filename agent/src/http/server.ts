@@ -14,7 +14,7 @@
  */
 
 import { serve } from "@hono/node-server";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import type {
   Address,
@@ -73,6 +73,25 @@ export interface HttpAppDeps {
   logger: DeskLogger;
 }
 
+/**
+ * Before DYNAMIC_WEBHOOK_SECRET exists (Dynamic shows it only after the URL passes its reachability ping) the
+ * route cannot verify anything, so it stores nothing: it acknowledges non-delegation events (the ping) with 200
+ * and answers delegation events 503, so Dynamic retries those once the secret is configured.
+ */
+function unconfiguredWebhookReply(c: Context, raw: Uint8Array) {
+  let eventName = "";
+  try {
+    const body = JSON.parse(new TextDecoder().decode(raw)) as { eventName?: unknown };
+    if (typeof body.eventName === "string") eventName = body.eventName;
+  } catch {
+    // not JSON: treat as a reachability probe
+  }
+  if (eventName.startsWith("wallet.delegation")) {
+    return c.json({ error: "webhook not configured" }, 503);
+  }
+  return c.json({ ok: true, configured: false }, 200);
+}
+
 export function createHttpApp(deps: HttpAppDeps): Hono {
   const app = new Hono();
 
@@ -85,8 +104,8 @@ export function createHttpApp(deps: HttpAppDeps): Hono {
       onError: (c) => c.json({ error: "payload too large" }, 413),
     }),
     async (c) => {
-      if (deps.webhook === null) return c.json({ error: "webhook not configured" }, 503);
       const raw = new Uint8Array(await c.req.arrayBuffer());
+      if (deps.webhook === null) return unconfiguredWebhookReply(c, raw);
       const headers: Record<string, string> = {};
       c.req.raw.headers.forEach((v, k) => {
         headers[k] = v;

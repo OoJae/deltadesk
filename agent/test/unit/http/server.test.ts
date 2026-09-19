@@ -74,9 +74,18 @@ describe("GET /health", () => {
     expect(r.status).toBe(200);
     expect(await r.json()).toMatchObject({ ok: false, pendingExecutions: 0 });
     expect((await app.request("/desks", { method: "POST" })).status).toBe(503);
+    // Unconfigured webhook: a probe is acknowledged, a delegation event is refused (see below).
     expect((await app.request("/webhooks/dynamic", { method: "POST", body: "{}" })).status).toBe(
-      503,
+      200,
     );
+    expect(
+      (
+        await app.request("/webhooks/dynamic", {
+          method: "POST",
+          body: JSON.stringify({ eventName: "wallet.delegation.created" }),
+        })
+      ).status,
+    ).toBe(503);
     expect((await app.request("/nope")).status).toBe(404);
   });
 });
@@ -253,6 +262,42 @@ describe("startHttpServer", () => {
       );
     } finally {
       await first.close();
+    }
+  });
+});
+
+describe("POST /webhooks/dynamic before the secret exists", () => {
+  const app = createHttpApp({
+    health: () => ({
+      ok: false,
+      lastTickAgeMs: null,
+      lockHeld: false,
+      pendingExecutions: 0,
+      nowMs: T0,
+    }),
+    webhook: null,
+    desks: null,
+    logger: silentLogger,
+  });
+  const post = (body: string) =>
+    app.request("/webhooks/dynamic", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body,
+    });
+
+  it("acknowledges Dynamic's reachability ping (any non-delegation event, or a non-JSON probe) and stores nothing", async () => {
+    for (const body of [JSON.stringify({ eventName: "ping" }), "{}", "not json"]) {
+      const r = await post(body);
+      expect(r.status).toBe(200);
+      expect(await r.json()).toEqual({ ok: true, configured: false });
+    }
+  });
+
+  it("refuses delegation events with 503 so Dynamic retries them once the secret is set", async () => {
+    for (const eventName of ["wallet.delegation.created", "wallet.delegation.revoked"]) {
+      const r = await post(JSON.stringify({ eventName, eventId: "e1", data: {} }));
+      expect(r.status).toBe(503);
     }
   });
 });

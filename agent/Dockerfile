@@ -48,9 +48,15 @@ COPY scripts ./scripts
 RUN node scripts/native-check.mjs
 # `node --import tsx` (not the tsx CLI): signals reach the process that drains the tick and
 # releases the daemon lock.
+# Railway (and most hosts) mount volumes root-owned: start as root only to hand /data to `node`,
+# then drop privileges with setpriv (util-linux) before the service runs. Never runs the agent as root.
 RUN printf '%s\n' \
     '#!/bin/sh' \
     'set -e' \
+    'if [ "$(id -u)" = "0" ]; then' \
+    '  mkdir -p /data/approvals && chown -R node:node /data' \
+    '  exec setpriv --reuid=node --regid=node --init-groups "$0" "$@"' \
+    'fi' \
     'case "${DESK_SERVICE:-desk-agent}" in' \
     '  desk-agent) exec node --import tsx src/main.ts ;;' \
     '  watchdog) exec node --import tsx src/watchdog/main.ts ;;' \
@@ -59,7 +65,6 @@ RUN printf '%s\n' \
   && chmod 755 /usr/local/bin/desk-service \
   && mkdir -p /data \
   && chown node:node /data
-USER node
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["desk-service"]
 
