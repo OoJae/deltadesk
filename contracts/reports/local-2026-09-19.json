@@ -1,0 +1,273 @@
+{
+ "runsLogged": 1001,
+ "violations": {
+  "I1": 0,
+  "I2": 0,
+  "I3": 0,
+  "I4": 0,
+  "I5": 0,
+  "I6": 0,
+  "I7": 0,
+  "I8": 0,
+  "I9": 0,
+  "I10": 0,
+  "I11": 0,
+  "I12": 0,
+  "I13": 0,
+  "I14": 0
+ },
+ "actions": {
+  "honest.rerange": {
+   "calls": 7605,
+   "laneOk": 4711,
+   "laneReverts": 2582
+  },
+  "honest.reducing": {
+   "calls": 9238,
+   "laneOk": 6775,
+   "laneReverts": 2463
+  },
+  "evil.rerange": {
+   "calls": 8881,
+   "laneOk": 748,
+   "laneReverts": 8133
+  },
+  "evil.call": {
+   "calls": 6902,
+   "laneOk": 4275,
+   "laneReverts": 2627
+  },
+  "evil.rawCalldata": {
+   "calls": 2245,
+   "laneOk": 1292,
+   "laneReverts": 953
+  },
+  "attacker.swap": {
+   "calls": 1888,
+   "laneOk": 0,
+   "laneReverts": 0
+  },
+  "attacker.donate": {
+   "calls": 920,
+   "laneOk": 0,
+   "laneReverts": 0
+  },
+  "attacker.sendNft": {
+   "calls": 892,
+   "laneOk": 0,
+   "laneReverts": 0
+  },
+  "attacker.npmDirect": {
+   "calls": 907,
+   "laneOk": 0,
+   "laneReverts": 0
+  },
+  "attacker.increaseLanePosition": {
+   "calls": 917,
+   "laneOk": 0,
+   "laneReverts": 0
+  },
+  "attacker.spoofCallback": {
+   "calls": 830,
+   "laneOk": 0,
+   "laneReverts": 0
+  },
+  "attacker.laneCall": {
+   "calls": 2720,
+   "laneOk": 1495,
+   "laneReverts": 1225
+  },
+  "owner.withdraw": {
+   "calls": 951,
+   "laneOk": 828,
+   "laneReverts": 123
+  },
+  "owner.withdrawAll": {
+   "calls": 488,
+   "laneOk": 488,
+   "laneReverts": 0
+  },
+  "owner.withdrawPosition": {
+   "calls": 474,
+   "laneOk": 28,
+   "laneReverts": 446
+  },
+  "owner.pause": {
+   "calls": 154,
+   "laneOk": 154,
+   "laneReverts": 0
+  },
+  "owner.unpause": {
+   "calls": 1664,
+   "laneOk": 1664,
+   "laneReverts": 0
+  },
+  "owner.tightenCaps": {
+   "calls": 460,
+   "laneOk": 460,
+   "laneReverts": 0
+  },
+  "owner.loosenCaps": {
+   "calls": 894,
+   "laneOk": 894,
+   "laneReverts": 0
+  },
+  "owner.applyCaps": {
+   "calls": 979,
+   "laneOk": 185,
+   "laneReverts": 802
+  },
+  "owner.cancelCaps": {
+   "calls": 482,
+   "laneOk": 114,
+   "laneReverts": 368
+  },
+  "owner.operator": {
+   "calls": 450,
+   "laneOk": 201,
+   "laneReverts": 222
+  },
+  "owner.guardian": {
+   "calls": 478,
+   "laneOk": 478,
+   "laneReverts": 0
+  },
+  "owner.closedUntil": {
+   "calls": 465,
+   "laneOk": 465,
+   "laneReverts": 0
+  },
+  "owner.deposit": {
+   "calls": 895,
+   "laneOk": 0,
+   "laneReverts": 0
+  },
+  "owner.rerange": {
+   "calls": 1988,
+   "laneOk": 783,
+   "laneReverts": 1064
+  },
+  "guardian.reducing": {
+   "calls": 4581,
+   "laneOk": 3343,
+   "laneReverts": 1238
+  },
+  "guardian.closedUntil": {
+   "calls": 2271,
+   "laneOk": 1445,
+   "laneReverts": 826
+  },
+  "guardian.forbidden": {
+   "calls": 2299,
+   "laneOk": 0,
+   "laneReverts": 2299
+  },
+  "env.warp": {
+   "calls": 9100,
+   "laneOk": 412,
+   "laneReverts": 0
+  },
+  "env.movePrice": {
+   "calls": 8923,
+   "laneOk": 0,
+   "laneReverts": 0
+  },
+  "env.chainlinkStockStep": {
+   "calls": 2567,
+   "laneOk": 0,
+   "laneReverts": 0
+  },
+  "env.chainlinkQuoteStep": {
+   "calls": 664,
+   "laneOk": 0,
+   "laneReverts": 0
+  },
+  "env.feedAge": {
+   "calls": 634,
+   "laneOk": 0,
+   "laneReverts": 0
+  },
+  "env.feedDecimals": {
+   "calls": 649,
+   "laneOk": 0,
+   "laneReverts": 0
+  },
+  "env.feedRevert": {
+   "calls": 629,
+   "laneOk": 0,
+   "laneReverts": 0
+  },
+  "env.feedBroken": {
+   "calls": 676,
+   "laneOk": 0,
+   "laneReverts": 0
+  },
+  "env.oraclePaused": {
+   "calls": 654,
+   "laneOk": 0,
+   "laneReverts": 0
+  },
+  "env.corporateAction": {
+   "calls": 1286,
+   "laneOk": 0,
+   "laneReverts": 0
+  },
+  "env.feedHeal": {
+   "calls": 1283,
+   "laneOk": 0,
+   "laneReverts": 0
+  },
+  "env.tokenPause": {
+   "calls": 9118,
+   "laneOk": 0,
+   "laneReverts": 0
+  }
+ },
+ "laneRevertsByError": {
+  "BadSlot": 5019,
+  "NotOwner": 4407,
+  "MarketClosed": 3615,
+  "NotAuthorized": 2219,
+  "ClosedUntilActive": 2068,
+  "NoPending": 1343,
+  "IsPaused": 1234,
+  "(no data: unknown selector / bad ABI)": 1202,
+  "TooManyRanges": 728,
+  "BadRange": 475,
+  "DeadlineTooFar": 448,
+  "PoolTickMoved": 402,
+  "SharesExceed": 398,
+  "Error(string)": 357,
+  "Expired": 261,
+  "ZeroDecision": 219,
+  "NotFactory": 207,
+  "TooSoon": 187,
+  "DecisionUsed": 137,
+  "RangeOutsideFence": 127,
+  "TickDeltaAboveCap": 126,
+  "ERC20InsufficientBalance": 81,
+  "TokenPaused": 42,
+  "TimelockActive": 42,
+  "BucketEmpty": 11,
+  "DeployCapExceeded": 9,
+  "OperatorIsOwner": 5,
+  "InvalidConfig": 2
+ },
+ "totals": {
+  "riskReranges": 2922,
+  "mints": 3145,
+  "priceSteps": 4291,
+  "corpSteps": 1060,
+  "donations": 1909,
+  "foreignNfts": 772,
+  "decisionIds": 32562
+ },
+ "turnoverUsd6": 74735066968,
+ "maxExitGasAtRunEnd": 644569,
+ "maxMintDevOfBandBps": 8587,
+ "maxLossOfI7AllowanceBps": 7596,
+ "pnlUsd6AtRunEnd": {
+  "min": -1042340,
+  "max": 313144
+ }
+}

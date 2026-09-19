@@ -1,0 +1,239 @@
+DeltaDesk M2 contracts: review-fix rerun of the local tests and invariant campaign, 2026-09-19 11:09 UTC
+
+command : forge build --sizes && DESK_INVARIANT_LOG=reports/local-2026-09-19-r2-runs.jsonl \
+          forge test --no-match-path 'test/fork/**' -vv && scripts/check-no-block-number.sh
+profile : default ([invariant] runs = 1000, depth = 100, fail_on_revert = false; [fuzz] runs = 1000, seed = 0x4663)
+toolchain: forge Version: 1.8.3-Homebrew, solc 0.8.26, evm cancun
+wall time: 294 s (test) ; build OK ; "ok: no block.number in src/"
+summary : python3 reports/summarize.py reports/local-2026-09-19-r2-runs.jsonl <forge output> reports/local-2026-09-19-r2.json
+supersedes: local-2026-09-19.txt (same fixture and campaign; that run predates the fixes below)
+
+Sizes (runtime / margin): DeskLaneV3 23,609 B / 967 B (unchanged), DeskLaneFactory 9,765 B / 14,811 B (was 8,363 B),
+ChainlinkFence 3,362 B (unchanged).
+
+Review fixes in this run
+- src/libraries/RangeRules.sol (HIGH): the placement fence skipped the bid check when tickLower == slot0.tick. v3
+  counts that range as in range and holds token1 on [1.0001^tc, P), so with the pool parked far above the band a
+  range [tc, tc + w) bid at the manipulated price. Reproduced on the old code: pool parked at the top of an aligned
+  tick 4,000 above the reference, [tc, tc + 20) at full shares, pool swapped back: fence-valued loss $0.645 on $26.96
+  deployed, 2.4x the 1% band allowance ($0.270). The finder measured 83% of notional at +46,000 ticks. Fix:
+  `if (tl < tc)` -> `if (tl <= tc)` for the bid side (one character; bytecode size unchanged). NatSpec updated.
+- src/DeskLaneFactory.sol (MEDIUM): lanesOf(owner) was writable by anyone (a stranger could list an attacker-operated
+  lane at the ceiling caps under a victim). Now a lane goes into lanesOf(owner) only when the owner itself sends
+  createLane (event LaneListed; view listed(lane)). createLane stays permissionless: a lane deployed for (or
+  front-run against) an owner is created but not listed, and the owner's own createLane with the same params returns
+  it and lists it instead of reverting (any other repeat reverts LaneExists). isLane still marks every clone (it vouches
+  for the code, not for intent).
+- src/DeskLaneFactory.sol (MEDIUM): setImplementation applied at once, so the admin could swap the code under an
+  in-flight createLane (reproduced: a drainer deployed at a non-predicted address, isLane true, 25 USDG drained).
+  Replacing a registered kind's implementation is now pending for IMPLEMENTATION_DELAY = 24 h (ImplementationProposed,
+  pendingImplementation) and applied by applyImplementation. Instant only where no predicted address can change: a
+  kind's first registration (the deploy script), disabling a kind (drops a pending one), re-affirming the current
+  implementation (cancels a pending one). Frozen interfaces and abi/ are unchanged; the new surface is non-interface.
+- Tests: RangeRules brute-force model fixed (the current bucket holds both tokens) plus a fuzz against exact v3
+  holdings (LaneMath.amounts); N2 regressions (pool parked far above/below, fence at the executed tick); N6 exitAll
+  tolerance of NPM positions/decreaseLiquidity/burn failures; N11 covers rerange, reduce, collect, withdraw and
+  withdrawAll as outer calls and checks the inner decision is unspent (HookToken records each attempt); maxRanges
+  below MAX_SLOTS; factory lanesOf/timelock regressions; CheckDeployment clone-target check.
+- Invariant harness: I10 now derives the fence from exact holdings at the pool sqrt price (it was a copy of the rule);
+  evilRerange parks the pool 200-3,200 ticks beyond the band on a tick edge and places a range whose in-range edge is
+  the pool tick; evil withdraw amounts are scaled to the lane balance; _modelRerange flags ranges > caps.maxRanges
+  (I4); maxRanges = 1 is reached more often and the evil operator then sends a valid ask+bid pair. New canaries:
+  an operator-callable withdraw (I1 + I8, paying the caller or the owner) and a bid at a parked pool tick (I10).
+
+Campaign: DeskInvariantsTest (test/invariant) over the M2 local fixture (real Uniswap v3 factory + NPM artifacts,
+mock USDG 6 dec / NVDA 18 dec with ERC-8056, mock Chainlink feeds, ChainlinkFence, default lane A caps, ~$50).
+The fuzzer drives 11 DeskHandler entry points; each dispatches to the inner actions counted below. 'lane ok/rev'
+count the lane calls each inner action made (a handler call never reverts; findings are recorded, not thrown).
+
+runs logged: 1001
+handler actions: 100101   lane calls: ok 30953, reverted 25587
+violations: I1=0, I2=0, I3=0, I4=0, I5=0, I6=0, I7=0, I8=0, I9=0, I10=0, I11=0, I12=0, I13=0, I14=0
+
+inner action                        calls  lane ok lane rev
+honest.rerange                       7557     4654     2631
+honest.reducing                      9238     6730     2508
+evil.rerange                         8881      554     8327
+evil.call                            6873     4292     2581
+evil.rawCalldata                     2274     1329      945
+attacker.swap                        1824        0        0
+attacker.donate                       922        0        0
+attacker.sendNft                      964        0        0
+attacker.npmDirect                    905        0        0
+attacker.increaseLanePosition         922        0        0
+attacker.spoofCallback                865        0        0
+attacker.laneCall                    2672     1479     1193
+owner.withdraw                        933      819      114
+owner.withdrawAll                     440      440        0
+owner.withdrawPosition                477       54      423
+owner.pause                           163      163        0
+owner.unpause                        1727     1727        0
+owner.tightenCaps                     446      446        0
+owner.loosenCaps                      919      919        0
+owner.applyCaps                       939      157      786
+owner.cancelCaps                      464      103      361
+owner.operator                        484      202      256
+owner.guardian                        483      483        0
+owner.closedUntil                     424      424        0
+owner.deposit                         924        0        0
+owner.rerange                        2047      826     1076
+guardian.reducing                    4527     3274     1253
+guardian.closedUntil                 2313     1491      822
+guardian.forbidden                   2311        0     2311
+env.warp                             9100      387        0
+env.movePrice                        8923        0        0
+env.chainlinkStockStep               2573        0        0
+env.chainlinkQuoteStep                660        0        0
+env.feedAge                           685        0        0
+env.feedDecimals                      656        0        0
+env.feedRevert                        630        0        0
+env.feedBroken                        640        0        0
+env.oraclePaused                      643        0        0
+env.corporateAction                  1277        0        0
+env.feedHeal                         1278        0        0
+env.tokenPause                       9118        0        0
+
+lane reverts by error:
+  BadSlot                          0xbdfde03c 5028
+  NotOwner                         0x30cd7471 4378
+  MarketClosed                     0x3e363de9 3592
+  NotAuthorized                    0xea8e4eb5 2211
+  ClosedUntilActive                0x6468cd23 2162
+  NoPending                        0xda7557bc 1345
+  IsPaused                         0x1309a563 1215
+  (no data: unknown selector / bad ABI) 0x00000000 1202
+  TooManyRanges                    0x24566020 643
+  RangeOutsideFence                0x1657574a 555
+  DeadlineTooFar                   0xf1290398 463
+  BadRange                         0x6780aeff 443
+  PoolTickMoved                    0x60a6fa99 426
+  Error(string)                    0x08c379a0 405
+  SharesExceed                     0xc01e0186 248
+  Expired                          0x95693653 216
+  ZeroDecision                     0x2f337454 208
+  NotFactory                       0x32cc7236 204
+  TooSoon                          0xe08a03ea 188
+  DecisionUsed                     0xfb838d5d 130
+  TickDeltaAboveCap                0xcb1b342c 130
+  ERC20InsufficientBalance         0xe450d38c 73
+  TimelockActive                   0xddffe20e 46
+  TokenPaused                      0xe7792495 41
+  BucketEmpty                      0xe2415084 14
+  DeployCapExceeded                0x82f9a417 9
+  OperatorIsOwner                  0xf962e14b 8
+  InvalidConfig                    0x367f56a2 4
+
+riskReranges       total     2795   max/run     13   runs with >0: 804
+mints              total     3091   max/run     14   runs with >0: 804
+priceSteps         total     4295   max/run     13   runs with >0: 994
+corpSteps          total     1062   max/run      5   runs with >0: 695
+donations          total     1921   max/run      8   runs with >0: 839
+foreignNfts        total      829   max/run      5   runs with >0: 566
+decisionIds        total    32574   max/run     50   runs with >0: 1001
+turnover minted (fence-valued): total $74,255.31, max/run $336.77
+max exitAll gas at the end of a run: 662,332
+I7 tightness: max per-mint worst-case loss / (band x notional) = 85.87%
+I7 tightness: max fence-valued loss / I7 allowance at any point of a run = 80.55%
+fence-valued P&L at run end: min -0.513372 USD, max 1.377319 USD
+
+forge output (invariant results and per-selector metrics):
+  Suite result: ok. 23 passed; 0 failed; 0 skipped; finished in 16.23ms (11.42ms CPU time)
+  Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 16.97ms (13.39ms CPU time)
+  Suite result: ok. 16 passed; 0 failed; 0 skipped; finished in 26.49ms (22.90ms CPU time)
+  [PASS] testFuzz_cloneArgsCodec(address,uint8,address,address,address,uint24,int24,uint8,uint8) (runs: 1000, μ: 4128, ~: 4128)
+  Suite result: ok. 20 passed; 0 failed; 0 skipped; finished in 47.36ms (43.43ms CPU time)
+  [PASS] testFuzz_closedWindowMatchesCalendar(uint32) (runs: 1000, μ: 6489, ~: 6498)
+  [PASS] testFuzz_neverReverts(int256,uint256,uint8,bool,bool) (runs: 1000, μ: 172910, ~: 175173)
+  Suite result: ok. 21 passed; 0 failed; 0 skipped; finished in 107.96ms (109.84ms CPU time)
+  [PASS] testFuzz_failureChangesNothing(uint64,uint64,uint32) (runs: 1000, μ: 78402, ~: 78237)
+  [PASS] testFuzz_roundingAgainstSpender(uint64,uint32,uint64) (runs: 1000, μ: 74379, ~: 74520)
+  Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 143.77ms (147.32ms CPU time)
+  Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 227.17ms (221.36ms CPU time)
+  [PASS] testFuzz_bothTokenOrders(uint256,uint256,uint8,uint8) (runs: 1000, μ: 12352, ~: 12522)
+  [PASS] testFuzz_roundTrip(int24) (runs: 1000, μ: 7485, ~: 7370)
+  [PASS] testFuzz_sqrtPriceBounds(uint256,uint256,uint8,uint8) (runs: 1000, μ: 7041, ~: 7197)
+  [PASS] testFuzz_tickBracketsPrice(uint256,uint256,uint8,uint8) (runs: 1000, μ: 10665, ~: 11108)
+  [PASS] testFuzz_usd6NeverUnderstates(uint256,uint256,uint8) (runs: 1000, μ: 3878, ~: 3882)
+  Suite result: ok. 14 passed; 0 failed; 0 skipped; finished in 284.53ms (344.73ms CPU time)
+  [PASS] testFuzz_fenceEdges(uint8,uint8,uint8,uint8) (runs: 1000, μ: 18977, ~: 7710)
+  [PASS] testFuzz_fenceMatchesBruteForce(int24,int16,uint16,int16,uint16) (runs: 1000, μ: 40552, ~: 12412)
+  [PASS] testFuzz_fenceSoundAgainstExactHoldings(int24,int16,uint16,int16,uint16,uint256) (runs: 1000, μ: 10065, ~: 12410)
+  [PASS] testFuzz_shape(int24,int24,uint8,uint24,uint24) (runs: 1000, μ: 1615, ~: 1552)
+  Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 269.39ms (371.50ms CPU time)
+  Suite result: ok. 26 passed; 0 failed; 0 skipped; finished in 302.14ms (139.24ms CPU time)
+  [PASS] testFuzz_predictMatchesCreate(address,address,address,uint8,bytes32) (runs: 1000, μ: 389402, ~: 390281)
+  Suite result: ok. 20 passed; 0 failed; 0 skipped; finished in 302.10ms (301.23ms CPU time)
+  Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 322.97ms (767.68ms CPU time)
+  DeskInvariantsTest invariants:
+  [PASS] invariant_I10_placementFence
+  [PASS] invariant_I11_noRiskAddingWhileClosed
+  [PASS] invariant_I12_nftBookkeeping
+  [PASS] invariant_I13_deadlineWindow
+  [PASS] invariant_I14_refTickFollowsFeeds
+  [PASS] invariant_I1_outflowsOnlyToOwnerOrOwnMints
+  [PASS] invariant_I3_decisionIdsSpentOnce
+  [PASS] invariant_I4_budgetsMatchModel
+  [PASS] invariant_I5_noAllowances
+  [PASS] invariant_I6_onlyLanePool
+  [PASS] invariant_I7_boundedLoss
+  [PASS] invariant_I8_rolesAndConfig
+  [PASS] invariant_I9_exitLiveness
+   DeskInvariantsTest invariants (runs: 1000, calls: 100000, reverts: 0)
+  ╭-------------+---------------+-------+---------+----------╮
+  | Contract    | Selector      | Calls | Reverts | Discards |
+  +==========================================================+
+  | DeskHandler | attackerAct   | 9065  | 0       | 0        |
+  |-------------+---------------+-------+---------+----------|
+  | DeskHandler | evilCall      | 9142  | 0       | 0        |
+  |-------------+---------------+-------+---------+----------|
+  | DeskHandler | evilRerange   | 8873  | 0       | 0        |
+  |-------------+---------------+-------+---------+----------|
+  | DeskHandler | guardianAct   | 9144  | 0       | 0        |
+  |-------------+---------------+-------+---------+----------|
+  | DeskHandler | honestReduce  | 9226  | 0       | 0        |
+  |-------------+---------------+-------+---------+----------|
+  | DeskHandler | honestRerange | 9132  | 0       | 0        |
+  |-------------+---------------+-------+---------+----------|
+  | DeskHandler | movePrice     | 8912  | 0       | 0        |
+  |-------------+---------------+-------+---------+----------|
+  | DeskHandler | oracleAct     | 9028  | 0       | 0        |
+  |-------------+---------------+-------+---------+----------|
+  | DeskHandler | ownerAct      | 9280  | 0       | 0        |
+  |-------------+---------------+-------+---------+----------|
+  | DeskHandler | tokenAct      | 9108  | 0       | 0        |
+  |-------------+---------------+-------+---------+----------|
+  | DeskHandler | warp          | 9090  | 0       | 0        |
+  ╰-------------+---------------+-------+---------+----------╯
+  Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 293.26s (293.25s CPU time)
+  Ran 13 test suites in 293.26s (295.32s CPU time): 177 tests passed, 0 failed, 0 skipped (177 total tests)
+
+Mutation check (scratch copies of this tree, one mutant each; "unit" = forge test --no-match-path 'test/fork/**'
+--no-match-contract DeskInvariantsTest, 176 tests; "quick" = FOUNDRY_PROFILE=quick DeskInvariantsTest, 64 x 50):
+  mutant                         killed by
+  RangeRules tl < tc (old rule)  unit: fenceMatchesBruteForce, fenceSoundAgainstExactHoldings, fenceExamples,
+                                 N2_parkedFarAboveBidAtPoolTickReverts; quick: I10
+  withdraw by operator, to caller unit: role matrix, N3; quick: I1, I8, I7
+  withdraw by operator, to owner  unit: role matrix, N3; quick: I1, I8, I7
+  withdraw without nonReentrant   unit: N11
+  withdrawAll without guard       unit: N11
+  reduce without guard            unit: N11
+  collect without guard           unit: N11
+  rerange without guard           unit: N11
+  maxRanges ignored (MAX_SLOTS)   unit: maxRangesCapBelowSlots; default campaign (1000 x 100): I4 ("2 ranges minted
+                                 above caps.maxRanges"); the quick profile does not reach it (maxRanges = 1 arises
+                                 in ~2 of 64 short runs)
+  exitAll strict (tolerant=false) unit: N6_exitAllToleratesEveryNpmFailure
+  fence at expectedTick           unit: N2_fenceUsesTheExecutedTick
+  lanesOf written for anyone      unit: strangerCannotListALaneForAnOwner, saltCommitsToEveryParam
+  setImplementation always instant unit: implementationReplacementIsTimelocked, setImplementationInstantCases
+The three original reproductions (old code: all succeed) all fail against this tree: the far-above placement
+reverts RangeOutsideFence(0, 226260, 226280, 222267, 100), a stranger's lane is not in lanesOf(victim), and the
+in-flight createLane lands at predictLane with the reviewed implementation.
+
+Notes
+- 'runs logged' is 1001 lines for forge's 1000 runs (afterInvariant appends once more); forge's own line is
+  authoritative (runs: 1000, calls: 100000, reverts: 0).
+- RangeOutsideFence reverts rose from 127 (previous run) to 555: the new far-park evil placements are refused.
+- Fork suites were not rerun here (they need RH_ARCHIVE_RPC); fork tests create lanes as the owner and register the
+  implementation once, so the factory changes do not alter their flow. See fork-public-2026-09-19.txt.
+- The per-run JSON lines are aggregated into local-2026-09-19-r2.json; the raw file is not kept.

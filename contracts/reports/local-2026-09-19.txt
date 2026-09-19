@@ -1,0 +1,196 @@
+Superseded by local-2026-09-19-r2.txt: a later review found a placement-fence bypass (tickLower == slot0.tick) and
+two factory issues that this campaign could not detect; see that report for the fixes and the rerun.
+
+DeltaDesk M2 contracts: local tests and invariant campaign, 2026-09-19 09:35 UTC
+
+command : DESK_INVARIANT_LOG=reports/local-2026-09-19-runs.jsonl forge test --no-match-path 'test/fork/**' -vv
+profile : default ([invariant] runs = 1000, depth = 100, fail_on_revert = false; [fuzz] runs = 1000, seed = 0x4663)
+toolchain: forge Version: 1.8.3-Homebrew, solc 0.8.26, evm cancun
+wall time: 292 s
+summary : python3 reports/summarize.py reports/local-2026-09-19-runs.jsonl <forge output> reports/local-2026-09-19.json
+
+Campaign: DeskInvariantsTest (test/invariant) over the M2 local fixture (real Uniswap v3 factory + NPM artifacts,
+mock USDG 6 dec / NVDA 18 dec with ERC-8056, mock Chainlink feeds, ChainlinkFence, default lane A caps, ~$50).
+The fuzzer drives 11 DeskHandler entry points; each dispatches to the inner actions counted below. 'lane ok/rev'
+count the lane calls each inner action made (a handler call never reverts; findings are recorded, not thrown).
+
+runs logged: 1001
+handler actions: 100101   lane calls: ok 31238, reverted 25371
+violations: I1=0, I2=0, I3=0, I4=0, I5=0, I6=0, I7=0, I8=0, I9=0, I10=0, I11=0, I12=0, I13=0, I14=0
+
+inner action                        calls  lane ok lane rev
+honest.rerange                       7605     4711     2582
+honest.reducing                      9238     6775     2463
+evil.rerange                         8881      748     8133
+evil.call                            6902     4275     2627
+evil.rawCalldata                     2245     1292      953
+attacker.swap                        1888        0        0
+attacker.donate                       920        0        0
+attacker.sendNft                      892        0        0
+attacker.npmDirect                    907        0        0
+attacker.increaseLanePosition         917        0        0
+attacker.spoofCallback                830        0        0
+attacker.laneCall                    2720     1495     1225
+owner.withdraw                        951      828      123
+owner.withdrawAll                     488      488        0
+owner.withdrawPosition                474       28      446
+owner.pause                           154      154        0
+owner.unpause                        1664     1664        0
+owner.tightenCaps                     460      460        0
+owner.loosenCaps                      894      894        0
+owner.applyCaps                       979      185      802
+owner.cancelCaps                      482      114      368
+owner.operator                        450      201      222
+owner.guardian                        478      478        0
+owner.closedUntil                     465      465        0
+owner.deposit                         895        0        0
+owner.rerange                        1988      783     1064
+guardian.reducing                    4581     3343     1238
+guardian.closedUntil                 2271     1445      826
+guardian.forbidden                   2299        0     2299
+env.warp                             9100      412        0
+env.movePrice                        8923        0        0
+env.chainlinkStockStep               2567        0        0
+env.chainlinkQuoteStep                664        0        0
+env.feedAge                           634        0        0
+env.feedDecimals                      649        0        0
+env.feedRevert                        629        0        0
+env.feedBroken                        676        0        0
+env.oraclePaused                      654        0        0
+env.corporateAction                  1286        0        0
+env.feedHeal                         1283        0        0
+env.tokenPause                       9118        0        0
+
+lane reverts by error:
+  BadSlot                          0xbdfde03c 5019
+  NotOwner                         0x30cd7471 4407
+  MarketClosed                     0x3e363de9 3615
+  NotAuthorized                    0xea8e4eb5 2219
+  ClosedUntilActive                0x6468cd23 2068
+  NoPending                        0xda7557bc 1343
+  IsPaused                         0x1309a563 1234
+  (no data: unknown selector / bad ABI) 0x00000000 1202
+  TooManyRanges                    0x24566020 728
+  BadRange                         0x6780aeff 475
+  DeadlineTooFar                   0xf1290398 448
+  PoolTickMoved                    0x60a6fa99 402
+  SharesExceed                     0xc01e0186 398
+  Error(string)                    0x08c379a0 357
+  Expired                          0x95693653 261
+  ZeroDecision                     0x2f337454 219
+  NotFactory                       0x32cc7236 207
+  TooSoon                          0xe08a03ea 187
+  DecisionUsed                     0xfb838d5d 137
+  RangeOutsideFence                0x1657574a 127
+  TickDeltaAboveCap                0xcb1b342c 126
+  ERC20InsufficientBalance         0xe450d38c 81
+  TokenPaused                      0xe7792495 42
+  TimelockActive                   0xddffe20e 42
+  BucketEmpty                      0xe2415084 11
+  DeployCapExceeded                0x82f9a417 9
+  OperatorIsOwner                  0xf962e14b 5
+  InvalidConfig                    0x367f56a2 2
+
+riskReranges       total     2922   max/run     14   runs with >0: 785
+mints              total     3145   max/run     14   runs with >0: 785
+priceSteps         total     4291   max/run     10   runs with >0: 985
+corpSteps          total     1060   max/run      6   runs with >0: 697
+donations          total     1909   max/run      7   runs with >0: 845
+foreignNfts        total      772   max/run      4   runs with >0: 543
+decisionIds        total    32562   max/run     52   runs with >0: 1001
+turnover minted (fence-valued): total $74,735.07, max/run $383.52
+max exitAll gas at the end of a run: 644,569
+I7 tightness: max per-mint worst-case loss / (band x notional) = 85.87%
+I7 tightness: max fence-valued loss / I7 allowance at any point of a run = 75.96%
+fence-valued P&L at run end: min -1.042340 USD, max 0.313144 USD
+
+forge output (invariant results and per-selector metrics):
+  Suite result: ok. 23 passed; 0 failed; 0 skipped; finished in 15.23ms (10.39ms CPU time)
+  Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 17.45ms (13.60ms CPU time)
+  Suite result: ok. 15 passed; 0 failed; 0 skipped; finished in 35.17ms (22.89ms CPU time)
+  Suite result: ok. 23 passed; 0 failed; 0 skipped; finished in 103.37ms (109.19ms CPU time)
+  [PASS] testFuzz_closedWindowMatchesCalendar(uint32) (runs: 1000, μ: 6489, ~: 6498)
+  [PASS] testFuzz_neverReverts(int256,uint256,uint8,bool,bool) (runs: 1000, μ: 172902, ~: 175185)
+  Suite result: ok. 21 passed; 0 failed; 0 skipped; finished in 105.49ms (104.79ms CPU time)
+  [PASS] testFuzz_cloneArgsCodec(address,uint8,address,address,address,uint24,int24,uint8,uint8) (runs: 1000, μ: 4128, ~: 4128)
+  Suite result: ok. 20 passed; 0 failed; 0 skipped; finished in 47.02ms (43.50ms CPU time)
+  [PASS] testFuzz_failureChangesNothing(uint64,uint64,uint32) (runs: 1000, μ: 78406, ~: 78237)
+  [PASS] testFuzz_roundingAgainstSpender(uint64,uint32,uint64) (runs: 1000, μ: 74377, ~: 74522)
+  Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 132.99ms (132.82ms CPU time)
+  Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 209.69ms (203.64ms CPU time)
+  [PASS] testFuzz_bothTokenOrders(uint256,uint256,uint8,uint8) (runs: 1000, μ: 12380, ~: 12512)
+  [PASS] testFuzz_roundTrip(int24) (runs: 1000, μ: 7485, ~: 7370)
+  [PASS] testFuzz_sqrtPriceBounds(uint256,uint256,uint8,uint8) (runs: 1000, μ: 7038, ~: 7197)
+  [PASS] testFuzz_tickBracketsPrice(uint256,uint256,uint8,uint8) (runs: 1000, μ: 10663, ~: 11114)
+  [PASS] testFuzz_usd6NeverUnderstates(uint256,uint256,uint8) (runs: 1000, μ: 3879, ~: 3882)
+  Suite result: ok. 14 passed; 0 failed; 0 skipped; finished in 221.81ms (361.60ms CPU time)
+  [PASS] testFuzz_predictMatchesCreate(address,address,address,uint8,bytes32) (runs: 1000, μ: 432656, ~: 433619)
+  Suite result: ok. 16 passed; 0 failed; 0 skipped; finished in 114.27ms (116.51ms CPU time)
+  [PASS] testFuzz_fenceEdges(uint8,uint8,uint8,uint8) (runs: 1000, μ: 14415, ~: 6319)
+  [PASS] testFuzz_fenceMatchesBruteForce(int24,int16,uint16,int16,uint16) (runs: 1000, μ: 39714, ~: 19695)
+  [PASS] testFuzz_shape(int24,int24,uint8,uint24,uint24) (runs: 1000, μ: 1616, ~: 1552)
+  Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 237.26ms (301.45ms CPU time)
+  Suite result: ok. 11 passed; 0 failed; 0 skipped; finished in 295.52ms (473.80ms CPU time)
+  DeskInvariantsTest invariants:
+  [PASS] invariant_I10_placementFence
+  [PASS] invariant_I11_noRiskAddingWhileClosed
+  [PASS] invariant_I12_nftBookkeeping
+  [PASS] invariant_I13_deadlineWindow
+  [PASS] invariant_I14_refTickFollowsFeeds
+  [PASS] invariant_I1_outflowsOnlyToOwnerOrOwnMints
+  [PASS] invariant_I3_decisionIdsSpentOnce
+  [PASS] invariant_I4_budgetsMatchModel
+  [PASS] invariant_I5_noAllowances
+  [PASS] invariant_I6_onlyLanePool
+  [PASS] invariant_I7_boundedLoss
+  [PASS] invariant_I8_rolesAndConfig
+  [PASS] invariant_I9_exitLiveness
+   DeskInvariantsTest invariants (runs: 1000, calls: 100000, reverts: 0)
+  ╭-------------+---------------+-------+---------+----------╮
+  | Contract    | Selector      | Calls | Reverts | Discards |
+  +==========================================================+
+  | DeskHandler | attackerAct   | 9065  | 0       | 0        |
+  |-------------+---------------+-------+---------+----------|
+  | DeskHandler | evilCall      | 9142  | 0       | 0        |
+  |-------------+---------------+-------+---------+----------|
+  | DeskHandler | evilRerange   | 8873  | 0       | 0        |
+  |-------------+---------------+-------+---------+----------|
+  | DeskHandler | guardianAct   | 9144  | 0       | 0        |
+  |-------------+---------------+-------+---------+----------|
+  | DeskHandler | honestReduce  | 9226  | 0       | 0        |
+  |-------------+---------------+-------+---------+----------|
+  | DeskHandler | honestRerange | 9132  | 0       | 0        |
+  |-------------+---------------+-------+---------+----------|
+  | DeskHandler | movePrice     | 8912  | 0       | 0        |
+  |-------------+---------------+-------+---------+----------|
+  | DeskHandler | oracleAct     | 9028  | 0       | 0        |
+  |-------------+---------------+-------+---------+----------|
+  | DeskHandler | ownerAct      | 9280  | 0       | 0        |
+  |-------------+---------------+-------+---------+----------|
+  | DeskHandler | tokenAct      | 9108  | 0       | 0        |
+  |-------------+---------------+-------+---------+----------|
+  | DeskHandler | warp          | 9090  | 0       | 0        |
+  ╰-------------+---------------+-------+---------+----------╯
+  Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 292.03s (292.02s CPU time)
+  Ran 13 test suites in 292.03s (293.56s CPU time): 166 tests passed, 0 failed, 0 skipped (166 total tests)
+
+Notes
+- 'runs logged' is 1001 lines for forge's 1000 runs: afterInvariant (which appends one line per call) ran once more
+  than the run count; the authoritative count is forge's own line above (runs: 1000, calls: 100000, reverts: 0).
+- Handler calls never revert (0 reverts in every selector row): every lane call is a low-level call whose outcome is
+  audited and fed to the models, so reverted lane calls are data (the 'lane reverts by error' table), not lost calls.
+- I7 is exercised near its limit: an evil placement reached 85.9% of its own worst-case bound, and the realised
+  fence-valued loss reached 76.0% of the running I7 allowance (band x minted notional + exposure created by Chainlink
+  steps and donated liquidity + rounding). Worst run-end P&L: -$1.04 against $74,735 minted over the campaign.
+- The checks are shown to be live by test/invariant/DeskChecksCanary.t.sol (11 tests): an implementation etched with
+  a value leak (I1), an off-fence mint (I10), and state tampering for I3, I4, I5, I6, I7, I8, I12 and I14 each trip
+  the matching check; test_harnessDrivesEveryActor asserts the actors reach risk-adding reranges, evil placements,
+  donations and price steps with every check green. test/invariant/ForkEnvAdapter.t.sol runs the fork-mode harness
+  (vm.mockCall feeds/pauses, raw balance-slot funding) on the local fixture.
+- An earlier run of this campaign stopped on I4 after ~540 runs: the handler's reference model rounded the minted
+  notional up per position, while the lane (and docs/m2-design-contracts.md, rerange step 9) rounds each token's TOTAL
+  up. With two ranges the model over-debited the turnover bucket by 1-2 usd6. A direct check confirmed the lane's
+  debit equals the spec formula (40/40 two-range reranges) and the per-position figure differs in 17/40. Fixed in the
+  model (test/invariant/DeskHandler.sol); no contract change. The run above is the complete rerun after the fix.
+- No genuine contract bug was found; nothing in src/ was changed.
+- The per-run JSON lines (DESK_INVARIANT_LOG) are aggregated into local-2026-09-19.json; the raw file is not kept.

@@ -1,0 +1,41 @@
+DeltaDesk M2 contracts: fork suites against the public Robinhood Chain RPC, 2026-09-19
+
+command : RH_ARCHIVE_RPC=https://rpc.mainnet.chain.robinhood.com FORK_BLOCK=latest FOUNDRY_PROFILE=fork \
+          forge test --mc 'ForkSanityTest|ForkLifecycleTest' -vv
+fork    : chain 4663 at latest, block timestamp 1789810868 = Sat 2026-09-19 09:41:08 UTC (inside the stock weekend
+          window). block.number inside the EVM reads 26010728: on Arbitrum Orbit it is the L1 block estimate.
+result  : 9 passed, 0 failed (ForkSanity 7/7 in 47.8 s, ForkLifecycle 2/2 in 89.1 s; wall 90 s)
+
+Does the public RPC work? Yes at latest, no at a pinned block.
+- It serves state only for roughly the last 5,000-20,000 blocks (about 30 minutes at ~100 ms blocks): eth_call at
+  latest-5000 answered, at latest-20000 it returned "historical state ... is not available". A fork pinned at the
+  default WEEKDAY_BLOCK (66,315,359 = Fri 2026-09-18 15:00:00 UTC) or SATURDAY_BLOCK (66,851,211 = Sat 2026-09-19
+  06:00:00 UTC) therefore needs the archive RPC (Alchemy); both numbers were found by bisection over block headers,
+  which the public RPC does serve.
+- At latest the whole suite ran in 90 s, well inside the retention window, with no rate limiting observed.
+
+What ran against the live chain (real pool, NPM, USDG, NVDA and Chainlink proxies):
+ForkSanity
+  - every address in Addresses4663 has code; the NVDA/USDG pool is token0 USDG / token1 NVDA / fee 500 / spacing 10
+    and is the v3 factory's pool; NPM.factory and WETH9 match; the pool has in-range liquidity
+  - feeds: 8 decimals, USDG 0.99995090, NVDA 222.44729849; fence codes USDG 0, NVDA 5 (weekend), each equal to what
+    the calendar, feed age and ERC-8056 flags predict; pool tick 222276 vs fence reference tick 222273
+  - funding: forge-std deal works for both tokens; the raw-slot fallback is right (USDG balances mapping at slot 1,
+    NVDA OpenZeppelin ERC-7201 ERC20Storage at 0x52c6...ce00; the pool's real balances read through both slots)
+  - a fresh contract holds and sends NVDA and USDG (no holder allowlist)
+  - script/Deploy.s.sol runs on the fork (fence, factory, implementation, kind 1, pool allowed, ceilings) and a lane
+    lands at predictLane
+  - weekend: riskAddingOpen() is (false, 5), a rerange reverts MarketClosed(5), exitAll and withdrawAll work
+ForkLifecycle (the block is a Saturday, so the test moved to Monday 02:00 UTC and re-stamped the live feed rounds)
+  - create, fund $25 USDG + $25 NVDA (NAV $49.998771), first mint of the whole balance, turnover left $100.54
+  - a whale moved the pool +-60 ticks three times: the lane collected 31,624 USDG base units and 0.000142 NVDA in fees
+  - guardian reduce (half), a 301 s later rerange (old NFTs burned), exitAll (no ERC-20 left the lane), withdrawAll:
+    the owner received 25.065792 USDG + 0.112374666961004398 NVDA; allowances 0 after every step
+  - withdrawPosition escape hatch: the owner took the NFT and decreased/collected it directly on the real NPM
+
+Not run against a live fork (per instructions only ForkSanity and ForkLifecycle were attempted on the public RPC):
+ForkAdversarial, ForkFiftyReranges and ForkInvariants (FOUNDRY_PROFILE=fork: 50 runs x depth 20). They compile, skip
+cleanly without RH_ARCHIVE_RPC, and the fork-mode harness they use (ForkDeskEnv + DeskHandler fork mode) is exercised
+locally by test/invariant/ForkEnvAdapter.t.sol. Run them with the archive RPC:
+  RH_ARCHIVE_RPC=<alchemy 4663 url> FOUNDRY_PROFILE=fork forge test            # pinned weekday block
+  RH_ARCHIVE_RPC=<alchemy 4663 url> FORK_BLOCK=latest FOUNDRY_PROFILE=fork forge test
