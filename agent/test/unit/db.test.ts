@@ -119,18 +119,18 @@ afterEach(() => {
 });
 
 describe("schema", () => {
-  it("migrates a fresh database to v4 with WAL on a file", () => {
+  it("migrates a fresh database to v5 with WAL on a file", () => {
     const dir = mkdtempSync(join(tmpdir(), "desk-db-"));
     dirs.push(dir);
     const db = openDb(join(dir, "nested", "desk.sqlite"));
-    expect(db.schemaVersion()).toBe(4);
-    expect(LATEST_SCHEMA_VERSION).toBe(4);
+    expect(db.schemaVersion()).toBe(5);
+    expect(LATEST_SCHEMA_VERSION).toBe(5);
     expect(db.sqlite.pragma("journal_mode", { simple: true })).toBe("wal");
     expect(db.sqlite.pragma("foreign_keys", { simple: true })).toBe(1);
     db.close();
   });
 
-  it("upgrades v1 → v4 without losing rows, and refuses a newer schema", () => {
+  it("upgrades v1 → v5 without losing rows, and refuses a newer schema", () => {
     const dir = mkdtempSync(join(tmpdir(), "desk-db-"));
     dirs.push(dir);
     const path = join(dir, "desk.sqlite");
@@ -138,12 +138,12 @@ describe("schema", () => {
     expect(v1.schemaVersion()).toBe(1);
     v1.insertDecision(decision(ULID_A));
     v1.close();
-    const v4 = openDb(path);
-    expect(v4.schemaVersion()).toBe(4);
-    expect(v4.getDecision(ULID_A)?.status).toBe("executing");
-    v4.close();
+    const v5 = openDb(path);
+    expect(v5.schemaVersion()).toBe(5);
+    expect(v5.getDecision(ULID_A)?.status).toBe("executing");
+    v5.close();
     const raw = new Database(path);
-    raw.pragma("user_version = 5");
+    raw.pragma("user_version = 6");
     raw.close();
     expect(() => openDb(path)).toThrow(/newer than this code/);
   });
@@ -501,6 +501,33 @@ describe("approvals", () => {
     expect(db.respondApproval(ULID_A, true, "web", "0xowner", T0 + 2_000)).toBe(false);
     expect(db.pendingApprovals(LANE, T0 + 2_000)).toEqual([]);
     expect(db.closeOrphanedApprovals("restart", T0 + 3_000)).toEqual([]);
+  });
+
+  it("closeOrphanedApprovals: a decision the dead process left observed with no open approval fails", () => {
+    const db = memDb();
+    const ULID_D = "01K5HZ3N8QW0000000000000DD"; // crashed while building: no approval row
+    const ULID_E = "01K5HZ3N8QW0000000000000EE"; // answered, then the process died before settling
+    const ULID_F = "01K5HZ3N8QW0000000000000FF"; // settled before: untouched
+    db.insertDecision(decision(ULID_D, { status: "observed" }));
+    db.insertDecision(decision(ULID_E, { status: "observed", statusDetail: "awaiting approval" }));
+    db.insertDecision(decision(ULID_F, { status: "dry_run" }));
+    db.createApproval({
+      decisionId: ULID_E,
+      laneAddress: LANE,
+      summary: "signal",
+      requestedAtMs: T0,
+      expiresAtMs: T0 + 120_000,
+    });
+    expect(db.respondApproval(ULID_E, true, "web", "0xowner", T0 + 1)).toBe(true);
+    expect(db.closeOrphanedApprovals("restart", T0 + 1_000)).toEqual([]);
+    for (const id of [ULID_D, ULID_E]) {
+      expect(db.getDecision(id)).toMatchObject({
+        status: "failed",
+        statusDetail:
+          "the agent restarted before this decision settled; nothing was signed (restart)",
+      });
+    }
+    expect(db.getDecision(ULID_F)?.status).toBe("dry_run");
   });
 });
 

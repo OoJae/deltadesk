@@ -17,6 +17,7 @@ const NAV: { href: string; label: string; prefetch?: boolean }[] = [
   { href: "/live", label: "Live desk" },
   { href: "/tearsheet", label: "Tearsheet" },
   { href: "/league", label: "League" },
+  { href: "/console", label: "Console" },
   { href: "/desk", label: "Desk", prefetch: false },
 ];
 

@@ -21,6 +21,13 @@
  *      was planned.
  *   11 notify, 12 record
  *
+ * Gate signals (regime/signal.ts): after step 3 a change of the lane's (regime, active gates)
+ * state since the last EMITTED signal plans ONE `signal(Meta)` step instead of the strategy's plan,
+ * unless that plan reduces risk (reducing always goes first; the signal waits for a later tick).
+ * It then runs the same pipeline: critic, build + simulate, guard (signal-policy), approval (copilot
+ * asks unless DESK_SIGNAL_AUTO=1), execute. Its Meta carries the announced regime code, gatesMask
+ * and the keccak256 of the transition preimage, which is stored per decisionId (gate_signals).
+ *
  * Fail-closed choices, in one place:
  * - Nothing reaches an executor without a guard verdict of `execute` for that exact step (final
  *   Meta, fresh simulation). The executor then re-checks idempotency and single-in-flight atomically
@@ -54,6 +61,19 @@ import { riskModel as defaultRiskModel } from "./guard/risk.js";
 import { resolveOverlay } from "./overlay/apply.js";
 import type { AttemptResolver } from "./reconcile/startup.js";
 import { computeRegime, defaultRegimeDeps, type RegimeDeps } from "./regime/index.js";
+import {
+  detectGateSignal,
+  type GateSignalSource,
+  gatesSettled,
+  type SignalState,
+  type SignalWatch,
+  signalKey,
+  signalNote,
+  signalPreimage,
+  signalStateOf,
+  stateOfSignal,
+  watchState,
+} from "./regime/signal.js";
 import { laneStrategy } from "./strategy/lanes.js";
 import {
   type Address,
@@ -61,6 +81,7 @@ import {
   type ChainRead,
   type Clock,
   type CriticVerdict,
+  type DecisionRow,
   type DecisionStatus,
   type DeskAction,
   type DeskDb,
@@ -135,6 +156,9 @@ export interface DaemonOptions {
   blindAlertTicks?: number;
   /** stop() waits this long for an in-flight tick. Default 20 s. */
   stopGraceMs?: number;
+  /** A gate signal that was never signed (blocked, dry-run, timed out) is retried after this.
+   * Default 10 min. */
+  signalRetryMs?: number;
 }
 
 export interface DaemonDeps {
@@ -277,7 +301,7 @@ function summarize(actions: readonly DeskAction[], notionalCents: number): strin
         case "pause":
           return "pause the lane";
         case "signal":
-          return "signal";
+          return `signal: ${a.note}`;
         case "hedge":
           return `paper hedge ${a.isBuy ? "buy" : "sell"} ${a.sz} ${a.coin} @ ${a.px}`;
         case "hold":
@@ -398,8 +422,27 @@ export function createReconcileLoop(deps: {
 interface LaneExtra {
   addingHoldUntilMs: number;
   reducingHoldUntilMs: number;
+  /** No gate signal is planned before this (after one that did not execute). */
+  signalHoldUntilMs: number;
   holdReason: string;
   blindTicks: number;
+  /** The lane's current (regime, gates) state and since when it holds (gate signals). */
+  watch: SignalWatch | null;
+}
+
+/** Which cooldown a decision that did not execute starts. */
+type HoldKind = "adding" | "reducing" | "signal";
+
+/** A gate signal planned this tick: what it announces and its reasonHash preimage. */
+interface PlannedSignal {
+  initial: boolean;
+  from: SignalState | null;
+  to: SignalState;
+  atMs: number;
+  source: GateSignalSource;
+  note: string;
+  reasonHash: Hex;
+  preimageJson: string;
 }
 
 interface BuiltStep {
@@ -423,6 +466,8 @@ interface DecisionContext {
   final: DeskPlan;
   critic: CriticVerdict;
   overlay: Awaited<ReturnType<typeof resolveOverlay>>;
+  /** Set when this decision is a gate signal (its only step is signal()). */
+  signal: PlannedSignal | null;
 }
 
 /** A guarded decision between its approval request and the answer (or its withdrawal). */
@@ -431,6 +476,7 @@ interface PendingDecision {
   built: BuiltStep[];
   reasonHash: Hex;
   adding: boolean;
+  hold: HoldKind;
   summary: string;
   mode: DeskMode;
   safeMode: boolean;
@@ -475,6 +521,7 @@ export function createDaemon(deps: DaemonDeps): Daemon {
   const throttleMs = opts.notifyThrottleMs ?? 15 * 60_000;
   const blindAlertTicks = opts.blindAlertTicks ?? 3;
   const stopGraceMs = opts.stopGraceMs ?? 20_000;
+  const signalRetryMs = opts.signalRetryMs ?? 10 * 60_000;
   const fees = createFeePolicy({
     floorWei: cfg.limits.feeFloorWei,
     capWei: cfg.limits.maxFeePerGasWei,
@@ -578,7 +625,14 @@ export function createDaemon(deps: DaemonDeps): Daemon {
     const key = lower(laneAddress);
     let e = extras.get(key);
     if (e === undefined) {
-      e = { addingHoldUntilMs: 0, reducingHoldUntilMs: 0, holdReason: "", blindTicks: 0 };
+      e = {
+        addingHoldUntilMs: 0,
+        reducingHoldUntilMs: 0,
+        signalHoldUntilMs: 0,
+        holdReason: "",
+        blindTicks: 0,
+        watch: null,
+      };
       extras.set(key, e);
     }
     return e;
@@ -687,8 +741,9 @@ export function createDaemon(deps: DaemonDeps): Daemon {
     return {
       decisionId: encodeDecisionId(ctx.decisionId, index),
       deadline: BigInt(Math.floor(nowMs / 1000) + deadlineAheadSec(caps)),
-      regime: ctx.regime.regimeCode,
-      gatesMask: ctx.regime.gatesMask,
+      // A gate signal announces exactly the state its preimage names.
+      regime: ctx.signal?.to.regimeCode ?? ctx.regime.regimeCode,
+      gatesMask: ctx.signal?.to.gatesMask ?? ctx.regime.gatesMask,
       reasonHash,
     };
   }
@@ -770,6 +825,13 @@ export function createDaemon(deps: DaemonDeps): Daemon {
       simulation: prepared?.simulation ?? null,
       estimatedGasCostWei: estimatedGasCostWei(prepared, chain),
       inFlight: action.kind === "hedge" ? 0 : db.inFlightCount(rt.signer.address),
+      signalRate:
+        action.kind === "signal"
+          ? {
+              count1h: db.countSignedSignals(rt.laneAddress, nowMs - HOUR_MS),
+              maxPerHour: cfg.signal.maxPerHour,
+            }
+          : null,
       nowMs,
     };
     let result: GuardResult;
@@ -840,18 +902,106 @@ export function createDaemon(deps: DaemonDeps): Daemon {
     return { kind: "decision", decisionId: ctx.decisionId, status, detail };
   }
 
-  /** Hold this risk class for a while after a decision that did not execute. */
+  /** Hold this risk class for a while after a decision that did not execute. A gate signal has
+   * its own hold: it never delays a risk-reducing step. */
   function holdAfter(
     rt: LaneRuntime,
-    adding: boolean,
+    kind: HoldKind,
     status: DecisionStatus,
     caps: LaneCaps | null,
   ) {
     const e = extraOf(rt.laneAddress);
     const now = clock.now();
-    if (adding) e.addingHoldUntilMs = now + addingRetryMs(caps);
-    else e.reducingHoldUntilMs = now + reducingRetryMs;
+    if (kind === "adding") e.addingHoldUntilMs = now + addingRetryMs(caps);
+    else if (kind === "reducing") e.reducingHoldUntilMs = now + reducingRetryMs;
+    else e.signalHoldUntilMs = now + reducingRetryMs;
     e.holdReason = status;
+  }
+
+  const holdKind = (adding: boolean, signal: boolean): HoldKind =>
+    signal ? "signal" : adding ? "adding" : "reducing";
+
+  /**
+   * The gate signal this tick should send instead of the strategy's (non-reducing) plan, or null.
+   * Reads what was emitted from the DB, so a restart neither re-emits nor misses a state.
+   */
+  function planGateSignal(
+    rt: LaneRuntime,
+    snapshot: DeskSnapshot,
+    regime: RegimeState,
+    nowMs: number,
+    log: DeskLogger,
+  ): PlannedSignal | null {
+    const extra = extraOf(rt.laneAddress);
+    const state = signalStateOf(regime);
+    if (extra.watch === null || !cfg.signal.enabled || nowMs < extra.signalHoldUntilMs) return null;
+    const desk = db.getDesk(rt.laneAddress);
+    const configured: DeskMode | null =
+      desk === null ? null : effectiveMode(desk.mode, cfg.timing.cancelWindowMs);
+    const halted =
+      desk === null
+        ? "no desk row for this lane"
+        : desk.status !== "active" && desk.status !== "registered"
+          ? `desk is ${desk.status}`
+          : configured === "advisory"
+            ? "advisory mode (signals go out from copilot / autopilot)"
+            : snapshot.chain === null
+              ? "no chain read this tick"
+              : snapshot.chain.lane.paused
+                ? "lane is paused"
+                : null;
+    const emitted = db.lastEmittedGateSignal(rt.laneAddress);
+    const latest = db.recentGateSignals(rt.laneAddress, 1)[0] ?? null;
+    const plan = detectGateSignal({
+      enabled: cfg.signal.enabled,
+      halted,
+      inFlight: db.inFlightCount(rt.signer.address),
+      state,
+      settled: gatesSettled(regime.gates),
+      watch: extra.watch,
+      nowMs,
+      lastEmitted:
+        emitted === null ? null : { toKey: emitted.toKey, state: stateOfSignal(emitted) },
+      // A pending decision of this lane is settled before this runs (pendingTick), so a signal
+      // still "pending" here was orphaned by a crash: it was never signed, retry it later.
+      latest:
+        latest === null
+          ? null
+          : {
+              toKey: latest.toKey,
+              status:
+                latest.status === "pending" && !pendings.has(lower(rt.laneAddress))
+                  ? "not_sent"
+                  : latest.status,
+              createdAtMs: latest.createdAtMs,
+            },
+      signed1h: db.countSignedSignals(rt.laneAddress, nowMs - HOUR_MS),
+      maxPerHour: cfg.signal.maxPerHour,
+      minDwellMs: cfg.signal.minDwellMs,
+      retryMs: signalRetryMs,
+    });
+    if (!plan.emit) {
+      if (emitted?.toKey !== signalKey(state))
+        log.debug({ reason: plan.reason }, "gate signal held");
+      return null;
+    }
+    const pre = signalPreimage({
+      lane: rt.laneAddress,
+      from: plan.from,
+      to: plan.to,
+      atMs: plan.atMs,
+      source: plan.source,
+    });
+    return {
+      initial: plan.initial,
+      from: plan.from,
+      to: plan.to,
+      atMs: plan.atMs,
+      source: plan.source,
+      note: signalNote(plan.from, plan.to),
+      reasonHash: pre.hash,
+      preimageJson: pre.json,
+    };
   }
 
   async function laneTick(rt: LaneRuntime): Promise<LaneTickOutcome> {
@@ -898,6 +1048,13 @@ export function createDaemon(deps: DaemonDeps): Daemon {
     const regime = computeRegime(regimeDeps, snapshot, state.gates, nowMs);
     state.gates = regime.gates;
     state.lastTickAtMs = nowMs;
+    extra.watch = watchState(
+      extra.watch,
+      signalStateOf(regime),
+      nowMs,
+      gatesSettled(regime.gates),
+      cfg.signal.minDwellMs,
+    );
     state.safeMode =
       desk?.status === "safe_mode"
         ? { reason: desk.statusDetail ?? "safe mode", sinceMs: desk.updatedAtMs }
@@ -952,16 +1109,38 @@ export function createDaemon(deps: DaemonDeps): Daemon {
     }
     plan = hedgePlan(rt, deskPlanOf(plan), snapshot, nowMs);
     const awaiting = await pendingTick(rt, plan, { snapshot, regime }, nowMs);
+    // Gate signals: the state is watched every tick; a change becomes one signal() step, unless the
+    // strategy reduces risk this tick (reducing goes first) or a decision is still pending.
+    const reducingPlan = executable(plan).some((a) => riskClassOf(a) === "reducing");
+    const signal =
+      awaiting !== null || reducingPlan ? null : planGateSignal(rt, snapshot, regime, nowMs, log);
     if (awaiting !== null) return awaiting;
+    if (signal !== null) {
+      plan = {
+        ...deskPlanOf(plan),
+        actions: [{ kind: "signal", lane: rt.lane, note: signal.note }],
+        rationale: [
+          ...plan.rationale,
+          `gate signal (${signal.source}): ${signal.note}`,
+          `reasonHash ${signal.reasonHash}`,
+        ],
+        trigger: null,
+        hurdle: null,
+        notionalCents: 0,
+      };
+    }
     const steps0 = executable(plan);
     if (steps0.length === 0) {
       return { kind: "hold", reason: plan.rationale.at(-1) ?? "hold" };
     }
-    const addingPlan = steps0.some((a) => riskClassOf(a) === "adding");
+    const addingPlan = signal === null && steps0.some((a) => riskClassOf(a) === "adding");
     const vetoAnchor = db.lastCooldownAnchor(rt.laneAddress);
-    const holdUntil = addingPlan
-      ? Math.max(extra.addingHoldUntilMs, vetoAnchor === null ? 0 : vetoAnchor + vetoCooldownMs)
-      : extra.reducingHoldUntilMs;
+    const holdUntil =
+      signal !== null
+        ? extra.signalHoldUntilMs
+        : addingPlan
+          ? Math.max(extra.addingHoldUntilMs, vetoAnchor === null ? 0 : vetoAnchor + vetoCooldownMs)
+          : extra.reducingHoldUntilMs;
     if (nowMs < holdUntil) {
       const why =
         addingPlan && vetoAnchor !== null && vetoAnchor + vetoCooldownMs > nowMs
@@ -977,7 +1156,8 @@ export function createDaemon(deps: DaemonDeps): Daemon {
     const decisionId = newDecisionId(nowMs);
     const overlay = await resolveOverlay(
       {
-        enabled: overlayWired && state.brain === "llm",
+        // A gate signal is not the LLM's to shape: identity overlay.
+        enabled: overlayWired && state.brain === "llm" && signal === null,
         planner: deps.overlay?.planner ?? null,
         critic: deps.overlay?.critic ?? null,
         ...(deps.overlay?.applier === undefined ? {} : { applier: deps.overlay.applier }),
@@ -1022,10 +1202,12 @@ export function createDaemon(deps: DaemonDeps): Daemon {
       final: finalPlan,
       critic: { verdict: criticResult.verdict, reason: criticResult.reason },
       overlay,
+      signal,
     };
     state.lastDecisionId = decisionId;
     // A decision row that cannot be written means no evidence trail: abort the tick (fail-closed).
-    db.insertDecision({
+    // A gate signal's preimage is written in the same transaction: no signal without its proof.
+    const decisionRow: DecisionRow = {
       decisionId,
       laneAddress: rt.laneAddress,
       lane: rt.lane,
@@ -1051,7 +1233,38 @@ export function createDaemon(deps: DaemonDeps): Daemon {
       approvalChannel: null,
       status: "observed",
       statusDetail: null,
-    });
+    };
+    if (signal === null) db.insertDecision(decisionRow);
+    else {
+      db.transaction(() => {
+        db.insertDecision(decisionRow);
+        db.insertGateSignal({
+          decisionId,
+          laneAddress: rt.laneAddress,
+          onchainId: encodeDecisionId(decisionId, 0),
+          initial: signal.initial,
+          fromKey: signal.from === null ? null : signalKey(signal.from),
+          toKey: signalKey(signal.to),
+          toRegime: signal.to.regime,
+          regimeCode: signal.to.regimeCode,
+          gatesMask: signal.to.gatesMask,
+          gatesJson: canonicalJson(signal.to.gates),
+          atMs: signal.atMs,
+          reasonHash: signal.reasonHash,
+          preimageJson: signal.preimageJson,
+          createdAtMs: nowMs,
+        });
+      });
+      log.info(
+        {
+          decisionId,
+          onchainDecisionId: encodeDecisionId(decisionId, 0),
+          reasonHash: signal.reasonHash,
+          preimage: signal.preimageJson,
+        },
+        "gate signal planned",
+      );
+    }
     try {
       db.insertOverlay({
         overlayId: overlay.record.overlayId,
@@ -1168,12 +1381,18 @@ export function createDaemon(deps: DaemonDeps): Daemon {
       : built.some((s) => s.guard.decision === "dry-run")
         ? "dry-run"
         : "execute";
-    const reason = reasonHashOf({
-      finalPlan: finiteOnly(final),
-      guardChecks: checks,
-      snapshotDigest: keccak256(stringToBytes(evidenceJson(snapshot))),
-    });
+    // A gate signal's reasonHash is its transition preimage's (stored per decisionId); every other
+    // decision commits to its plan, its guard checks and its snapshot.
+    const reason =
+      ctx.signal !== null
+        ? { hash: ctx.signal.reasonHash, preimage: ctx.signal.preimageJson }
+        : reasonHashOf({
+            finalPlan: finiteOnly(final),
+            guardChecks: checks,
+            snapshotDigest: keccak256(stringToBytes(evidenceJson(snapshot))),
+          });
     const adding = built.some((s) => s.riskClass === "adding");
+    const hold = holdKind(adding, ctx.signal !== null);
     const notional = built.reduce(
       (acc, s) => acc + (s.riskClass === "adding" ? s.notionalCents : 0),
       0,
@@ -1200,7 +1419,7 @@ export function createDaemon(deps: DaemonDeps): Daemon {
     if (decision === "blocked") {
       const status: DecisionStatus =
         ctx.critic.verdict === "REJECT" ? "critic_rejected" : "blocked";
-      holdAfter(rt, adding, status, caps);
+      holdAfter(rt, hold, status, caps);
       await notifyOnce(`${rt.laneAddress}:${status}:${violations[0]?.rule ?? ""}`, {
         kind: "decision",
         severity: "warn",
@@ -1213,7 +1432,7 @@ export function createDaemon(deps: DaemonDeps): Daemon {
       return finish(ctx, status, guardReason);
     }
     if (decision === "dry-run") {
-      holdAfter(rt, adding, "dry_run", caps);
+      holdAfter(rt, hold, "dry_run", caps);
       await notifyOnce(`${rt.laneAddress}:dry_run:${adding}`, {
         kind: "decision",
         severity: "info",
@@ -1231,7 +1450,7 @@ export function createDaemon(deps: DaemonDeps): Daemon {
     // there; otherwise the decision stays pending and a later tick settles it (pendingTick).
     const desk = db.getDesk(rt.laneAddress);
     if (desk?.status === "revoked") {
-      holdAfter(rt, adding, "blocked", caps);
+      holdAfter(rt, hold, "blocked", caps);
       return finish(ctx, "blocked", `desk revoked: ${desk.statusDetail ?? "delegation withdrawn"}`);
     }
     const safeMode = desk?.status === "safe_mode";
@@ -1249,13 +1468,23 @@ export function createDaemon(deps: DaemonDeps): Daemon {
     }
     const paperOnly = built.every((s) => s.action.kind === "hedge") && cfg.hl.mode === "paper";
     const riskClass: RiskClass = adding ? "adding" : "reducing";
+    // What the approval posture treats this decision as. A paper order moves no money and never
+    // waits; a gate signal is neutral: copilot asks the human for it unless DESK_SIGNAL_AUTO=1
+    // (autopilot never waits for one).
+    const approvalClass: RiskClass = paperOnly
+      ? "reducing"
+      : ctx.signal !== null
+        ? mode === "copilot" && !cfg.signal.auto
+          ? "adding"
+          : "neutral"
+        : riskClass;
     const request = {
       decisionId: ctx.decisionId,
       laneAddress: rt.laneAddress,
       summary,
       windowMs: cfg.timing.approvalWindowMs,
     };
-    if (mode === "copilot" && adding && !paperOnly) {
+    if (mode === "copilot" && approvalClass === "adding") {
       await safeNotify({
         kind: "approval-request",
         severity: "warn",
@@ -1275,6 +1504,7 @@ export function createDaemon(deps: DaemonDeps): Daemon {
       built,
       reasonHash: reason.hash,
       adding,
+      hold,
       summary,
       mode,
       safeMode,
@@ -1289,13 +1519,13 @@ export function createDaemon(deps: DaemonDeps): Daemon {
     };
     const answer = decideApproval({
       mode,
-      // A paper order moves no money: it never waits for a human.
-      riskClass: paperOnly ? "reducing" : riskClass,
+      riskClass: approvalClass,
       gate,
       request,
       cancelWindowMs: cfg.timing.cancelWindowMs,
+      // A declined signal is recorded on its row (one per transition); it never holds reranges.
       onVeto: () => {
-        if (!pending.withdrawn) anchorVeto(rt, log);
+        if (!pending.withdrawn && hold !== "signal") anchorVeto(rt, log);
       },
     }).catch((err: unknown): ApprovalDecision => {
       log.warn({ error: errText(err) }, "approval gate failed (fail-closed: declined)");
@@ -1350,7 +1580,7 @@ export function createDaemon(deps: DaemonDeps): Daemon {
     });
     if (!approval.execute) {
       const status: DecisionStatus = approval.status ?? "declined";
-      holdAfter(rt, adding, status, caps);
+      holdAfter(rt, p.hold, status, caps);
       const detail =
         status === "advisory"
           ? p.safeMode
@@ -1393,7 +1623,7 @@ export function createDaemon(deps: DaemonDeps): Daemon {
     } catch (err) {
       p.log.warn({ error: errText(err) }, "approval row not closed");
     }
-    if (outcome === "timeout") anchorVeto(ctx.rt, p.log); // silence is no
+    if (outcome === "timeout" && p.hold !== "signal") anchorVeto(ctx.rt, p.log); // silence is no
     const caps = ctx.snapshot.chain?.lane.caps ?? null;
     db.updateDecision(ctx.decisionId, {
       approvalMode: p.mode,
@@ -1401,7 +1631,7 @@ export function createDaemon(deps: DaemonDeps): Daemon {
       approvalChannel: null,
       updatedAtMs: clock.now(),
     });
-    holdAfter(ctx.rt, p.adding, "declined", caps);
+    holdAfter(ctx.rt, p.hold, "declined", caps);
     p.log.info({ decisionId: ctx.decisionId, why }, "pending decision withdrawn");
     await safeNotify({
       kind: "decision",
@@ -1461,18 +1691,39 @@ export function createDaemon(deps: DaemonDeps): Daemon {
     });
     let confirmed = 0;
     for (const step of built) {
+      const stepHold = holdKind(step.riskClass === "adding", step.action.kind === "signal");
       const stop = (status: DecisionStatus, detail: string): LaneTickOutcome => {
         const settled =
           confirmed > 0 && (status === "blocked" || status === "failed")
             ? "partially_executed"
             : status;
-        holdAfter(rt, step.riskClass === "adding", settled, caps);
+        holdAfter(rt, stepHold, settled, caps);
         return finish(ctx, settled, detail);
       };
       if (!heartbeat()) return stop("blocked", "daemon lock lost before execution");
       const current = db.getDesk(rt.laneAddress);
       if (current !== null && current.status !== "active" && current.status !== "registered") {
         return stop("blocked", `desk became ${current.status} before step ${step.index}`);
+      }
+      // The owner switched the desk to advisory while this waited for an answer: advisory never
+      // signs anything optional (a risk-reducing step never waits, so it is not held here).
+      if (
+        current !== null &&
+        step.riskClass !== "reducing" &&
+        effectiveMode(current.mode, cfg.timing.cancelWindowMs) === "advisory"
+      ) {
+        return stop("advisory", `desk switched to advisory before step ${step.index}`);
+      }
+      // A gate signal announces the state it was planned for, never one that already ended (an
+      // approval that came late): the detector plans the current state as a new transition.
+      if (ctx.signal !== null && step.action.kind === "signal") {
+        const nowKey = signalKey(signalStateOf(base.regime));
+        if (nowKey !== signalKey(ctx.signal.to)) {
+          return stop(
+            "blocked",
+            `gate state changed since the signal was planned (${signalKey(ctx.signal.to)} → ${nowKey})`,
+          );
+        }
       }
       if (step.action.kind !== "hedge") {
         let ready: { ready: boolean; reason: string | null };
@@ -1568,7 +1819,7 @@ export function createDaemon(deps: DaemonDeps): Daemon {
         outcome.status === "signed"
       ) {
         // The tx may still land: the resolver and the LaneAction reconciler settle it.
-        holdAfter(rt, step.riskClass === "adding", "executing", caps);
+        holdAfter(rt, stepHold, "executing", caps);
         return finish(
           ctx,
           "executing",

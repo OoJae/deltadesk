@@ -665,6 +665,9 @@ export async function deskUnderTest(p: {
   dbPath?: string;
   skipPreflight?: boolean;
   deps?: Partial<DaemonDeps>;
+  /** Extra env (e.g. DESK_SIGNAL_GATES=1). Gate signals are off unless asked for, so the other
+   * suites keep their exact transaction counts. */
+  env?: Record<string, string>;
 }): Promise<DeskUnderTest> {
   const { fork } = p;
   const signerKey = p.signerKey ?? KEYS.operator;
@@ -676,6 +679,8 @@ export async function deskUnderTest(p: {
     DRY_RUN: "false",
     DESK_ARM: "1",
     DESK_MODE: "copilot",
+    DESK_SIGNAL_GATES: "0",
+    ...p.env,
   });
   const clock = new ChainClock();
   await clock.sync(fork);

@@ -22,12 +22,16 @@ import type {
   Address,
   ApprovalRow,
   DecisionRow,
+  DecisionStatus,
   DelegationRevocationRow,
   DelegationRow,
   DeskDb,
   DeskRow,
   ExecutionRow,
   ExecutionStatus,
+  GateSignalRow,
+  GateSignalStatus,
+  GateSignalView,
   Hex,
   HlFillRow,
   HlOrderRow,
@@ -388,6 +392,67 @@ const APPROVALS: TableSpec<ApprovalRow> = {
   },
 };
 
+const GATE_SIGNALS: TableSpec<GateSignalRow> = {
+  name: "gate_signals",
+  cols: {
+    decisionId: ["decision_id", "s"],
+    laneAddress: ["lane", "a"],
+    onchainId: ["onchain_id", "a"],
+    initial: ["initial", "b"],
+    fromKey: ["from_key", "s"],
+    toKey: ["to_key", "s"],
+    toRegime: ["to_regime", "s"],
+    regimeCode: ["regime_code", "n"],
+    gatesMask: ["gates_mask", "n"],
+    gatesJson: ["gates_json", "s"],
+    atMs: ["at_ms", "n"],
+    reasonHash: ["reason_hash", "a"],
+    preimageJson: ["preimage_json", "s"],
+    createdAtMs: ["created_at_ms", "n"],
+  },
+};
+
+/** A gate signal row joined with its decision and its (step 0) execution. */
+const GATE_SIGNAL_SELECT = `SELECT s.*, d.status AS d_status, d.approval_outcome AS d_outcome,
+  e.status AS e_status, e.signed_at_ms AS e_signed_at, e.tx_hash AS e_tx_hash,
+  e.error_code AS e_error_code,
+  (SELECT COALESCE(SUM(a.broadcast_count), 0) FROM tx_attempts a
+     WHERE a.execution_id = e.execution_id) AS e_broadcasts
+  FROM gate_signals s
+  LEFT JOIN decisions d ON d.decision_id = s.decision_id
+  LEFT JOIN executions e ON e.decision_id = s.decision_id AND e.step_index = 0`;
+
+/** A signal's status from its decision and execution (the single definition; see GateSignalStatus). */
+export function gateSignalStatus(
+  decisionStatus: DecisionStatus | null,
+  approvalOutcome: string | null,
+  executionStatus: ExecutionStatus | null,
+  signedAtMs: number | null,
+  broadcasts = 1,
+  errorCode: string | null = null,
+): GateSignalStatus {
+  if (signedAtMs !== null) {
+    if (executionStatus === "confirmed") return "confirmed";
+    if (
+      executionStatus === "signed" ||
+      executionStatus === "broadcast" ||
+      executionStatus === "unknown"
+    )
+      return "sent";
+    // Signed bytes that never left (deadline passed, desk halted before broadcast), or that expired
+    // unmined (DEADLINE_PASSED: no receipt, not in the pool, nonce not consumed; the lane rejects
+    // them after their deadline): nothing reached the chain, so the state may be announced again.
+    if (executionStatus === "dropped" && (broadcasts === 0 || errorCode === "DEADLINE_PASSED"))
+      return "not_sent";
+    return "failed"; // reverted, or dropped for a consumed nonce: one per transition
+  }
+  if (executionStatus === "prepared" || executionStatus === "simulated") return "pending";
+  if (decisionStatus === null || decisionStatus === "observed" || decisionStatus === "executing")
+    return "pending";
+  if (decisionStatus === "declined" && approvalOutcome === "denied") return "declined";
+  return "not_sent";
+}
+
 const PARAM_CACHE: TableSpec<ParamCacheRow> = {
   name: "param_cache",
   cols: {
@@ -515,6 +580,25 @@ export function openDb(path: string, opts: OpenDbOptions = {}): DeskDbHandle {
   }
 
   const tx = <T>(fn: () => T): T => db.transaction(fn)();
+
+  function signalView(raw: unknown): GateSignalView {
+    const r = raw as Record<string, unknown>;
+    const row = fromRaw(GATE_SIGNALS, raw);
+    const signedAt = (r.e_signed_at as number | null | undefined) ?? null;
+    return {
+      ...row,
+      status: gateSignalStatus(
+        (r.d_status as DecisionStatus | null | undefined) ?? null,
+        (r.d_outcome as string | null | undefined) ?? null,
+        (r.e_status as ExecutionStatus | null | undefined) ?? null,
+        signedAt,
+        Number(r.e_broadcasts ?? 0),
+        (r.e_error_code as string | null | undefined) ?? null,
+      ),
+      decisionStatus: (r.d_status as DecisionStatus | null | undefined) ?? null,
+      txHash: (r.e_tx_hash as Hex | null | undefined) ?? null,
+    };
+  }
 
   // -------------------------------------------------------------------------------------------
 
@@ -1135,6 +1219,15 @@ export function openDb(path: string, opts: OpenDbOptions = {}): DeskDbHandle {
             });
           }
         }
+        // Any other decision still `observed` was being decided by the dead process (built,
+        // simulated or answered, never executing: nothing of it was signed). Nobody settles it now.
+        prep(
+          `UPDATE decisions SET status = 'failed', status_detail = ?, updated_at_ms = ?
+           WHERE status = 'observed'`,
+        ).run(
+          `the agent restarted before this decision settled; nothing was signed (${reason})`,
+          nowMs,
+        );
         return closed;
       });
     },
@@ -1182,6 +1275,37 @@ export function openDb(path: string, opts: OpenDbOptions = {}): DeskDbHandle {
         lower(laneAddress),
       ) as { anchored_ms: number } | undefined;
       return r?.anchored_ms ?? null;
+    },
+
+    // gate signals ---------------------------------------------------------------------------
+    insertGateSignal(row) {
+      insertRow(GATE_SIGNALS, row);
+    },
+    getGateSignal(decisionId) {
+      const raw = prep(`${GATE_SIGNAL_SELECT} WHERE s.decision_id = ?`).get(decisionId);
+      return raw === undefined ? null : signalView(raw);
+    },
+    recentGateSignals(laneAddress, n) {
+      return prep(
+        `${GATE_SIGNAL_SELECT} WHERE s.lane = ? ORDER BY s.created_at_ms DESC, s.decision_id DESC LIMIT ?`,
+      )
+        .all(lower(laneAddress), n)
+        .map(signalView);
+    },
+    lastEmittedGateSignal(laneAddress) {
+      const raw = prep(
+        `${GATE_SIGNAL_SELECT} WHERE s.lane = ? AND e.signed_at_ms IS NOT NULL
+           AND e.status IN ('signed','broadcast','unknown','confirmed')
+         ORDER BY s.created_at_ms DESC, s.decision_id DESC LIMIT 1`,
+      ).get(lower(laneAddress));
+      return raw === undefined ? null : signalView(raw);
+    },
+    countSignedSignals(laneAddress, sinceMs) {
+      const r = prep(
+        `SELECT COUNT(*) AS n FROM executions
+         WHERE lane = ? AND action = 'signal' AND signed_at_ms IS NOT NULL AND signed_at_ms >= ?`,
+      ).get(lower(laneAddress), sinceMs) as { n: number };
+      return r.n;
     },
 
     // server wallets ------------------------------------------------------------------------

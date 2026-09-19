@@ -813,6 +813,7 @@ export type GuardRuleId =
   | "single-in-flight"
   | "deadline-sane"
   | "hl-order"
+  | "signal-policy"
   | "dry-run";
 
 /** Evaluation order; dry-run is always last. */
@@ -841,6 +842,7 @@ export const GUARD_RULES: readonly GuardRuleId[] = [
   "single-in-flight",
   "deadline-sane",
   "hl-order",
+  "signal-policy",
   "dry-run",
 ];
 
@@ -926,6 +928,11 @@ export interface GuardInput {
   estimatedGasCostWei: bigint | null;
   /** Transactions in flight for this signer (prepared / simulated / signed / broadcast / unknown). */
   inFlight: number;
+  /**
+   * Gate signals only (signal-policy): signal() transactions of this lane signed in the last
+   * rolling hour, and DESK_SIGNAL_MAX_PER_HOUR. Missing for a signal step: blocked (fail-closed).
+   */
+  signalRate?: { count1h: number; maxPerHour: number } | null;
   nowMs: number;
 }
 
@@ -1592,6 +1599,17 @@ export interface DeskStatusView {
     summary: string | null;
   } | null;
   pendingApprovals: Array<{ decisionId: string; summary: string; expiresAtMs: number }>;
+  /** The lane's latest gate signal (the full preimage: GET /desks/:lane/signals/:decisionId). */
+  lastSignal?: {
+    decisionId: Hex;
+    status: GateSignalStatus;
+    regime: RegimeName;
+    gates: GateName[];
+    gatesMask: number;
+    reasonHash: Hex;
+    txHash: Hex | null;
+    createdAtMs: number;
+  } | null;
 }
 
 export interface HealthView {
@@ -2045,6 +2063,54 @@ export interface ApprovalRow {
   closeReason: string | null;
 }
 
+/**
+ * One gate signal (signal(Meta) LaneAction) the agent planned: the state it announces, and the
+ * canonical preimage of its Meta.reasonHash, keyed by the decision ULID (step 0 carries it).
+ */
+export interface GateSignalRow {
+  decisionId: string;
+  laneAddress: Address;
+  /** The on-chain decisionId (bytes32, step 0). */
+  onchainId: Hex;
+  /** True while no state was emitted before (from null, source "initial"). Only the lane's very
+   * first planned signal skips the minimum dwell. */
+  initial: boolean;
+  /** `${regimeCode}:${gatesMask}` of the last emitted state; null for the initial signal. */
+  fromKey: string | null;
+  toKey: string;
+  toRegime: RegimeName;
+  regimeCode: number;
+  gatesMask: number;
+  /** The announced active gates (GateName[], canonical JSON). */
+  gatesJson: string;
+  /** When the announced state began (as observed by this process), ms. */
+  atMs: number;
+  reasonHash: Hex;
+  /** canonical JSON {lane, from, to, at, source}; keccak256(preimageJson) == reasonHash. */
+  preimageJson: string;
+  createdAtMs: number;
+}
+
+/**
+ * pending: planned, not settled yet · sent: signed, may still land · confirmed: mined ·
+ * failed: signed but reverted, or dropped for a consumed nonce · declined: the owner denied it ·
+ * not_sent: never reached the chain (blocked, dry-run, advisory, withdrawn, timed out, or signed
+ * bytes that were never sent or expired unmined).
+ */
+export type GateSignalStatus =
+  | "pending"
+  | "sent"
+  | "confirmed"
+  | "failed"
+  | "declined"
+  | "not_sent";
+
+export interface GateSignalView extends GateSignalRow {
+  status: GateSignalStatus;
+  decisionStatus: DecisionStatus | null;
+  txHash: Hex | null;
+}
+
 export interface ParamCacheRow {
   key: string;
   valueJson: string;
@@ -2269,7 +2335,9 @@ export interface DeskDb {
   /**
    * Startup: close EVERY pending approval (no in-memory waiter survives a restart, so none may be
    * answered later): past its window → expired, else cancelled, both with `reason`. The decision
-   * still waiting on it (status observed) becomes declined. Returns the closed rows.
+   * still waiting on it (status observed) becomes declined; any other decision still observed
+   * (the dead process was building or settling it, nothing signed) becomes failed. Returns the
+   * closed rows.
    */
   closeOrphanedApprovals(reason: string, nowMs: number): ApprovalRow[];
   pendingApprovals(laneAddress: Address, nowMs: number): ApprovalRow[];
@@ -2287,6 +2355,17 @@ export interface DeskDb {
   /** A veto anchors a per-lane cooldown that survives restarts (monotonic). */
   recordCooldownAnchor(laneAddress: Address, atMs: number): void;
   lastCooldownAnchor(laneAddress: Address): number | null;
+
+  // gate signals (signal(Meta) of a regime / gate change; the reasonHash preimage per decisionId)
+  insertGateSignal(row: GateSignalRow): void;
+  /** One signal by its decision ULID, with its status derived from the decision and execution. */
+  getGateSignal(decisionId: string): GateSignalView | null;
+  /** Newest first. */
+  recentGateSignals(laneAddress: Address, n: number): GateSignalView[];
+  /** The newest signal whose transaction is confirmed or may still land (signed, broadcast, unknown). */
+  lastEmittedGateSignal(laneAddress: Address): GateSignalView | null;
+  /** signal() executions of this lane with a signature at or after sinceMs (the hourly cap). */
+  countSignedSignals(laneAddress: Address, sinceMs: number): number;
 
   // server wallets (Plan B)
   upsertServerWallet(row: ServerWalletRow): void;

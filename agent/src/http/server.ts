@@ -27,6 +27,7 @@ import type {
 } from "../types.js";
 import { createDeskRoutes, type DeskApiDeps } from "./desks.js";
 import { MAX_WEBHOOK_BYTES } from "./dynamic-webhook.js";
+import { createPublicFeedRoutes } from "./public-feed.js";
 import { createWatchdogRoutes, type WatchdogApiDeps } from "./watchdog-api.js";
 
 export type { HealthView, HttpServerHandle } from "../types.js";
@@ -96,6 +97,7 @@ export function createHttpApp(deps: HttpAppDeps): Hono {
   const app = new Hono();
 
   app.get("/health", (c) => c.json(deps.health()));
+  app.route("/", createPublicFeedRoutes(deps));
 
   app.post(
     "/webhooks/dynamic",

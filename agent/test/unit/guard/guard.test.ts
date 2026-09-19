@@ -21,14 +21,14 @@ function withChain(
 }
 
 describe("guard: the valid path", () => {
-  it("executes a valid armed rerange and evaluates all 25 rules in order, dry-run last", () => {
+  it("executes a valid armed rerange and evaluates all 26 rules in order, dry-run last", () => {
     const { input } = validAddingStep();
     const r = checkGuard(input);
     expect(r.violations).toEqual([]);
     expect(r.decision).toBe("execute");
     expect(r.checks.map((c) => c.rule)).toEqual([...GUARD_RULES]);
     expect(r.checks.at(-1)?.rule).toBe("dry-run");
-    expect(r.reason).toBe("all 25 checks passed");
+    expect(r.reason).toBe("all 26 checks passed");
   });
 
   it("DRY_RUN holds a fully valid step", () => {
@@ -59,7 +59,7 @@ describe("guard: the valid path", () => {
       "arm-flag",
       "single-in-flight",
     ]);
-    expect(r.checks).toHaveLength(25);
+    expect(r.checks).toHaveLength(26);
     expect(r.reason).toMatch(/^blocked by daily-turnover/);
   });
 });
@@ -458,7 +458,7 @@ describe("guard: new rules", () => {
     const broken = { ...input, snapshot: { ...input.snapshot, chain: null } } as GuardInput;
     const r = checkGuard(broken);
     expect(r.decision).toBe("blocked");
-    expect(r.checks).toHaveLength(25);
+    expect(r.checks).toHaveLength(26);
     const weird = {
       ...input,
       meta: { ...input.meta, decisionId: "0xnothex" },

@@ -20,18 +20,18 @@ export type DeskStatusProbe = (laneAddress: Address) => DeskStatus | null;
 
 /**
  * Why a transaction of this risk class may not be signed or sent for this lane right now, or null
- * when it may. Only risk-ADDING steps are held back, and only an active / registered desk sends
- * them; safe mode, revoked, disabled, a missing desk row or an unreadable status all refuse
- * (fail-closed). Risk-reducing steps are never held here: they only lower risk. The executor
- * (before signing and before each broadcast) and the attempt resolver (before sending stored bytes)
- * share this one probe.
+ * when it may. Risk-ADDING and neutral (gate signal) steps are held back, and only an active /
+ * registered desk sends them; safe mode, revoked, disabled, a missing desk row or an unreadable
+ * status all refuse (fail-closed): a halted desk signs nothing optional. Risk-reducing steps are
+ * never held here: they only lower risk. The executor (before signing and before each broadcast)
+ * and the attempt resolver (before sending stored bytes) share this one probe.
  */
 export function deskHaltedReason(
   deskStatus: DeskStatusProbe,
   laneAddress: Address,
   riskClass: RiskClass,
 ): string | null {
-  if (riskClass !== "adding") return null;
+  if (riskClass === "reducing") return null;
   let status: DeskStatus | null;
   try {
     status = deskStatus(laneAddress);

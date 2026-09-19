@@ -11,6 +11,9 @@
  *     stored), so a delegation event that is not newer can never (re)activate the wallet.
  * v4: approvals.close_reason: why an approval was closed without an answer (its window ran out, a
  *     risk-reducing plan preempted it, or a restart left no one waiting for it).
+ * v5: gate_signals: every planned signal(Meta) of a regime / gate change with the canonical
+ *     preimage of its reasonHash (append-only), so a restart neither re-emits nor misses a state
+ *     and anyone can recompute the on-chain reasonHash.
  *
  * CHECK constraints mirror the TypeScript unions in src/types.ts, so a status, action or risk class
  * outside the contract cannot be stored at all (an executions.action of 'withdraw' is rejected here
@@ -389,14 +392,42 @@ const V4 = `
 ALTER TABLE approvals ADD COLUMN close_reason TEXT;
 `;
 
+const V5 = `
+CREATE TABLE gate_signals (
+  decision_id   TEXT PRIMARY KEY CHECK (length(decision_id) = 26) REFERENCES decisions(decision_id),
+  lane          TEXT NOT NULL ${ADDRESS("lane")},
+  onchain_id    TEXT NOT NULL UNIQUE CHECK (length(onchain_id) = 66),
+  initial       INTEGER NOT NULL CHECK (initial IN (0,1)),
+  from_key      TEXT,
+  to_key        TEXT NOT NULL,
+  to_regime     TEXT NOT NULL CHECK (to_regime IN ('REGULAR','EXTENDED','OVERNIGHT','WEEKEND_DARK','HOLIDAY')),
+  regime_code   INTEGER NOT NULL CHECK (regime_code BETWEEN 0 AND 255),
+  gates_mask    INTEGER NOT NULL CHECK (gates_mask BETWEEN 0 AND 65535),
+  gates_json    TEXT NOT NULL,
+  at_ms         INTEGER NOT NULL,
+  reason_hash   TEXT NOT NULL CHECK (length(reason_hash) = 66),
+  preimage_json TEXT NOT NULL,
+  created_at_ms INTEGER NOT NULL,
+  CHECK (initial = 1 OR from_key IS NOT NULL)
+);
+CREATE INDEX idx_gate_signals_lane ON gate_signals (lane, created_at_ms DESC);
+
+CREATE TRIGGER gate_signals_no_delete BEFORE DELETE ON gate_signals
+BEGIN SELECT RAISE(ABORT, 'gate signals are append-only'); END;
+
+CREATE TRIGGER gate_signals_immutable BEFORE UPDATE ON gate_signals
+BEGIN SELECT RAISE(ABORT, 'gate signals are immutable (the preimage proves an on-chain hash)'); END;
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "core", sql: V1 },
   { version: 2, name: "desk", sql: V2 },
   { version: 3, name: "delegation-revocations", sql: V3 },
   { version: 4, name: "approval-close-reason", sql: V4 },
+  { version: 5, name: "gate-signals", sql: V5 },
 ];
 
-export const LATEST_SCHEMA_VERSION = 4;
+export const LATEST_SCHEMA_VERSION = 5;
 
 export function schemaVersion(db: Database.Database): number {
   return db.pragma("user_version", { simple: true }) as number;

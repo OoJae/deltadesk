@@ -15,6 +15,7 @@ import {
   signDynamicPayload,
 } from "../../../src/http/dynamic-webhook.js";
 import { silentLogger } from "../../../src/log.js";
+import { signalPreimage } from "../../../src/regime/signal.js";
 import { createVault } from "../../../src/signer/vault.js";
 import type {
   Address,
@@ -477,6 +478,69 @@ describe("GET /desks/:lane/status", () => {
         },
       ],
     });
+  });
+});
+
+describe("GET /desks/:lane/signals/:decisionId (a gate signal and its reasonHash preimage)", () => {
+  it("owner only; by bytes32 or ULID; the preimage hashes to the reasonHash; 404 when unknown", async () => {
+    const s = await registered();
+    const id = seedDecision(s.db, { laneAddress: LANE });
+    const pre = signalPreimage({
+      lane: LANE,
+      from: null,
+      to: { regime: "WEEKEND_DARK", regimeCode: 4, gates: ["CLOSED"], gatesMask: 1 },
+      atMs: T0,
+      source: "initial",
+    });
+    s.db.insertGateSignal({
+      decisionId: id,
+      laneAddress: LANE,
+      onchainId: encodeDecisionId(id, 0),
+      initial: true,
+      fromKey: null,
+      toKey: "4:1",
+      toRegime: "WEEKEND_DARK",
+      regimeCode: 4,
+      gatesMask: 1,
+      gatesJson: '["CLOSED"]',
+      atMs: T0,
+      reasonHash: pre.hash,
+      preimageJson: pre.json,
+      createdAtMs: T0,
+    });
+    for (const key of [encodeDecisionId(id, 0), id]) {
+      const r = await s.call("GET", `/desks/${LANE}/signals/${key}`);
+      expect(r.status).toBe(200);
+      const body = (await r.json()) as Record<string, unknown>;
+      expect(body).toMatchObject({
+        decisionId: encodeDecisionId(id, 0),
+        decisionUlid: id,
+        status: "pending",
+        regime: "WEEKEND_DARK",
+        regimeCode: 4,
+        gates: ["CLOSED"],
+        gatesMask: 1,
+        reasonHash: pre.hash,
+        preimageJson: pre.json,
+        verified: true,
+        preimage: { lane: LANE.toLowerCase(), from: null, source: "initial" },
+      });
+    }
+    const status = (await (await s.call("GET", `/desks/${LANE}/status`)).json()) as {
+      lastSignal: Record<string, unknown>;
+    };
+    expect(status.lastSignal).toMatchObject({
+      decisionId: encodeDecisionId(id, 0),
+      status: "pending",
+    });
+    expect(
+      (await s.call("GET", `/desks/${LANE}/signals/${id}`, undefined, s.strangerJwt)).status,
+    ).toBe(403);
+    expect((await s.call("GET", `/desks/${LANE}/signals/${seedDecision(s.db)}`)).status).toBe(404);
+    expect((await s.call("GET", `/desks/${LANE}/signals/nope`)).status).toBe(400);
+    expect(
+      (await s.call("GET", `/desks/${LANE}/signals/${id}`, undefined, s.ownerJwt, null)).status,
+    ).toBe(401);
   });
 });
 

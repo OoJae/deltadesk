@@ -14,6 +14,10 @@
  * bypass the arm flag, dry-run, the allowlist, idempotency, simulation or signer binding.
  * The risk class is the stricter of the declared one and riskClassOf(action): a step claiming to
  * be reducing while its action adds risk is treated as adding (and fails the allowlist).
+ *
+ * Gate signals (neutral, optional) are held to more than a reducing step, never to less: they
+ * keep the operator's gas reserve (the reserve pays for exits), never go out on a paused lane, and
+ * respect the hourly signal cap (signal-policy). They move no funds: value 0, the signal selector.
  */
 
 import { CHAIN_ID_4663 } from "../addresses.js";
@@ -101,6 +105,7 @@ export function checkGuard(input: GuardInput): GuardResult {
   const isHedge = kind === "hedge";
   const onchain = !isHedge && kind !== "hold" && kind !== undefined;
   const isAddingRerange = action?.kind === "rerange" && action.ranges.length > 0;
+  const isSignal = kind === "signal";
   const chain = input.snapshot?.chain ?? null;
   const lane = chain?.lane ?? null;
   const nowSec = Math.floor(input.nowMs / 1000);
@@ -356,14 +361,16 @@ export function checkGuard(input: GuardInput): GuardResult {
         ];
   });
 
-  // 11. gas-reserve: adding keeps the reserve after gas; reducing only needs its own gas.
+  // 11. gas-reserve: adding (and an optional gate signal) keeps the reserve after gas; reducing
+  // only needs its own gas.
   run("gas-reserve", () => {
     if (isHedge) return [true, "HL order: no chain gas"];
     if (chain === null) return [false, "operator ETH unknown (no chain read)"];
     const eth = chain.operatorEthWei;
     const cost = input.estimatedGasCostWei;
-    if (adding) {
-      if (cost === null || cost <= 0n) return [false, "gas cost unknown for a risk-adding step"];
+    if (adding || isSignal) {
+      if (cost === null || cost <= 0n)
+        return [false, `gas cost unknown for a ${isSignal ? "signal" : "risk-adding step"}`];
       return eth - cost >= input.limits.gasReserveWei
         ? [true, `ETH ${eth} − gas ${cost} ≥ reserve ${input.limits.gasReserveWei} wei`]
         : [false, `ETH ${eth} − gas ${cost} < reserve ${input.limits.gasReserveWei} wei`];
@@ -629,7 +636,26 @@ export function checkGuard(input: GuardInput): GuardResult {
       : [false, problems.join("; ")];
   });
 
-  // 25. dry-run: always last; decides only when everything else passed.
+  // 25. signal-policy: a gate signal goes out only on an unpaused lane, within the hourly cap.
+  run("signal-policy", () => {
+    if (!isSignal || action?.kind !== "signal") return [true, "not a signal"];
+    const problems: string[] = [];
+    if (lane === null) problems.push("lane state unknown (no chain read)");
+    else if (lane.paused) problems.push("lane is paused: a halted lane signs nothing optional");
+    const rate = input.signalRate;
+    if (rate === null || rate === undefined) problems.push("signal count unknown (fail-closed)");
+    else if (!(Number.isInteger(rate.count1h) && rate.count1h >= 0))
+      problems.push(`signal count ${rate.count1h} invalid`);
+    else if (rate.count1h >= rate.maxPerHour)
+      problems.push(`${rate.count1h} signal(s) in the last hour, max ${rate.maxPerHour}`);
+    if (action.note.length === 0 || action.note.length > 280)
+      problems.push("signal note empty or longer than 280");
+    return problems.length === 0
+      ? [true, `signal ${rate?.count1h ?? 0}/${rate?.maxPerHour ?? 0} this hour, lane unpaused`]
+      : [false, problems.join("; ")];
+  });
+
+  // 26. dry-run: always last; decides only when everything else passed.
   const dryRun = input.flags.dryRun !== false;
   checks.push({
     rule: "dry-run",

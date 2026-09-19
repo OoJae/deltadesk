@@ -10,6 +10,9 @@
  *                                `DeltaDesk mode <checksummed lane> <mode> <nonce>`; nonce strictly
  *                                increasing. A signed mode change also clears safe mode.
  *   POST /desks/:lane/approve    {decisionId, approve}: copilot answer from the web (bytes32 or ULID).
+ *   GET  /desks/:lane/signals/:decisionId  a gate signal and the canonical preimage of its
+ *                                reasonHash (bytes32 or ULID), with `verified`: keccak256 of the
+ *                                stored preimage equals the hash (owner only). 404 when unknown.
  *   GET  /delegations/:operator  has the delegation webhook for this Operator wallet landed yet?
  *                                {operator (checksummed), status: active | revoked | unknown,
  *                                walletId, updatedAtMs}. Works BEFORE POST /desks: the wizard polls
@@ -29,6 +32,7 @@ import { deskLaneFactoryAbi } from "../executor/abi/DeskLaneFactory.js";
 import { createLaneViews, readContract } from "../executor/chain.js";
 import { encodeDecisionId, isUlid, tryDecodeDecisionId } from "../executor/decision-id.js";
 import { classifyError } from "../executor/errors.js";
+import { gatesOfMask, hashOfPreimage } from "../regime/signal.js";
 import type {
   Address,
   ChainClient,
@@ -40,6 +44,7 @@ import type {
   DeskRow,
   DeskStatusView,
   GateName,
+  GateSignalView,
   JwtVerifier,
   LaneOnchainState,
   Notifier,
@@ -154,6 +159,30 @@ const ModeSchema = z.object({
 });
 const ApproveSchema = z.object({ decisionId: z.string().max(80), approve: z.boolean() });
 
+/** GET /desks/:lane/signals/:decisionId: a gate signal with its reasonHash preimage. */
+export function signalJson(g: GateSignalView): Record<string, unknown> {
+  return {
+    decisionId: g.onchainId,
+    decisionUlid: g.decisionId,
+    lane: g.laneAddress,
+    status: g.status,
+    decisionStatus: g.decisionStatus,
+    initial: g.initial,
+    regime: g.toRegime,
+    regimeCode: g.regimeCode,
+    gates: gatesOfMask(g.gatesMask),
+    gatesMask: g.gatesMask,
+    atMs: g.atMs,
+    reasonHash: g.reasonHash,
+    preimage: JSON.parse(g.preimageJson) as unknown,
+    /** The exact bytes that were hashed (UTF-8): recompute keccak256 over this string. */
+    preimageJson: g.preimageJson,
+    verified: hashOfPreimage(g.preimageJson).toLowerCase() === g.reasonHash.toLowerCase(),
+    txHash: g.txHash,
+    createdAtMs: g.createdAtMs,
+  };
+}
+
 export function buildStatusView(
   d: DeskRow,
   db: DeskDb,
@@ -163,6 +192,7 @@ export function buildStatusView(
   const active = db.getActiveDelegationByAddress(d.operator);
   const tick = db.lastTick(d.laneAddress);
   const decision = db.recentDecisions(1, d.laneAddress)[0];
+  const lastSignal = db.recentGateSignals(d.laneAddress, 1)[0];
   return {
     lane: d.laneAddress,
     owner: d.owner,
@@ -235,6 +265,19 @@ export function buildStatusView(
       summary: a.summary,
       expiresAtMs: a.expiresAtMs,
     })),
+    lastSignal:
+      lastSignal === undefined
+        ? null
+        : {
+            decisionId: lastSignal.onchainId,
+            status: lastSignal.status,
+            regime: lastSignal.toRegime,
+            gates: gatesOfMask(lastSignal.gatesMask),
+            gatesMask: lastSignal.gatesMask,
+            reasonHash: lastSignal.reasonHash,
+            txHash: lastSignal.txHash,
+            createdAtMs: lastSignal.createdAtMs,
+          },
   };
 }
 
@@ -458,6 +501,20 @@ export function createDeskRoutes(deps: DeskApiDeps): Hono {
     }
     logger.info({ lane, decisionId: ulid, approve: body.approve }, "web approval answer");
     return c.json({ decisionId: ulid, approved: body.approve });
+  });
+
+  app.get("/desks/:lane/signals/:decisionId", async (c) => {
+    const lane = laneParam(c);
+    const raw = c.req.param("decisionId") ?? "";
+    const ulid = isUlid(raw) ? raw : isHex(raw) ? (tryDecodeDecisionId(raw)?.ulid ?? null) : null;
+    if (ulid === null)
+      throw new HttpError(400, "decisionId must be a ULID or a DeltaDesk bytes32 id");
+    const u = await user(c);
+    ownedDesk(u, lane);
+    const g = db.getGateSignal(ulid);
+    if (g === null || g.laneAddress !== lane)
+      throw new HttpError(404, "no such gate signal for this lane");
+    return c.json(signalJson(g));
   });
 
   app.get("/delegations/:operator", async (c) => {

@@ -176,6 +176,11 @@ const EnvSchema = z.object({
   DESK_RECONCILE_SEC: def(z.coerce.number().int().min(5).default(30)),
   DESK_APPROVAL_WINDOW_SEC: def(z.coerce.number().int().min(10).max(900).default(120)),
   DESK_CANCEL_WINDOW_SEC: def(z.coerce.number().int().min(0).max(900).default(0)),
+  // gate signals: one delegated signal(Meta) LaneAction per regime / gate change
+  DESK_SIGNAL_GATES: def(flag01.default("1")),
+  DESK_SIGNAL_AUTO: def(flag01.default("0")),
+  DESK_SIGNAL_MAX_PER_HOUR: def(z.coerce.number().int().min(0).max(60).default(6)),
+  DESK_SIGNAL_MIN_DWELL_SEC: def(z.coerce.number().int().min(0).max(3_600).default(60)),
   // runtime
   DESK_DB_PATH: def(z.string().min(1).default(DEFAULT_DB_PATH)),
   DESK_APPROVAL_DIR: def(z.string().min(1).default(DEFAULT_APPROVAL_DIR)),
@@ -258,6 +263,13 @@ export interface AppConfig {
     maxGasCents: number;
   };
   reranges: { perHour: number; perDay: number; minIntervalSec: number };
+  /**
+   * Gate signals (agent/README.md "Gate signals"): `enabled` DESK_SIGNAL_GATES; `auto`
+   * DESK_SIGNAL_AUTO (copilot signals skip the human approval: they are neutral); at most
+   * `maxPerHour` signed signals per lane per rolling hour; a state younger than `minDwellMs` is
+   * never announced (except the lane's first).
+   */
+  signal: { enabled: boolean; auto: boolean; maxPerHour: number; minDwellMs: number };
   timing: typeof TIMING & {
     tickMs: number;
     reconcileMs: number;
@@ -508,6 +520,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       perDay: e.DESK_RERANGES_PER_DAY,
       minIntervalSec: e.DESK_MIN_RERANGE_INTERVAL_SEC,
     },
+    signal: {
+      enabled: e.DESK_SIGNAL_GATES === "1",
+      auto: e.DESK_SIGNAL_AUTO === "1",
+      maxPerHour: e.DESK_SIGNAL_MAX_PER_HOUR,
+      minDwellMs: e.DESK_SIGNAL_MIN_DWELL_SEC * 1000,
+    },
     timing: {
       ...TIMING,
       tickMs: e.DESK_TICK_SEC * 1000,
@@ -635,6 +653,9 @@ export function describeConfig(cfg: AppConfig): string[] {
     `default mode ${cfg.safety.defaultMode.toUpperCase()}`,
     `DRY_RUN ${cfg.safety.dryRun ? "ON" : "off"} · DESK_ARM ${cfg.safety.armed ? "1" : "0"}`,
     `caps $${cfg.limits.maxActionCents / 100}/action · $${cfg.limits.dailyTurnoverCents / 100}/24h`,
+    cfg.signal.enabled
+      ? `gate signals ON (≤ ${cfg.signal.maxPerHour}/h/lane, dwell ${cfg.signal.minDwellMs / 1000} s, ${cfg.signal.auto ? "auto" : "copilot asks"})`
+      : "gate signals off",
   ];
 }
 

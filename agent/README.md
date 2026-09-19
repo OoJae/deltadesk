@@ -89,6 +89,67 @@ adding, 30 s for reducing), so a blocked or dry-run plan is not re-proposed ever
 anchors a 15 min cooldown in the DB that survives restarts. Lane B's paper hedge runs only while the
 lane otherwise holds, never beside a resting paper order, and only reduces its position outside `normal`.
 
+## Gate signals (`src/regime/signal.ts`)
+
+Every change of a lane's state, **(calendar regime, active gates)**, is written on-chain as one
+delegated `signal(Meta)` → `LaneAction(SIGNAL)`. `signal()` is operator-or-owner, spends the
+decisionId like every Meta call and is not market-gated, so it is the desk's live transaction over a
+weekend. It moves no funds (value 0; never turnover).
+
+- **When.** Right after step 3 of the tick. The first signal of a lane announces its current state as
+  soon as the gate machine has left its startup hold (so it goes right after delegation and
+  registration); after that, a state is announced once it differs from the last **emitted** one
+  (signed and confirmed or still landing, read from the DB, so a restart never re-emits or misses)
+  and has held `DESK_SIGNAL_MIN_DWELL_SEC` (default 60 s, on top of the machine's dwell-off; states
+  that flap faster are never announced). Only the lane's very first planned signal skips that dwell,
+  so a denied first one does not let later states flap out. At most `DESK_SIGNAL_MAX_PER_HOUR`
+  (default 6) signed signals per lane per rolling hour; a skipped intermediate state is not announced
+  late.
+- **One per transition.** While the lane stays in a state whose signal the owner denied, or whose
+  signed tx reverted, it is not asked again. Once the lane holds another state for the dwell and
+  comes back, that is a new transition and is asked afresh (a shorter flap is not; a state found at
+  startup counts as the same run, so a restart never re-asks). A signal that never reached the chain
+  (DRY_RUN, a guard block, an approval timeout, a withdrawal, a tx that expired unmined) is retried
+  after 10 min. An approval that arrives after its state ended sends nothing (`blocked`): the chain
+  never shows a state that is already over, and the current one is planned as a new transition.
+- **Priority.** A risk-reducing plan always goes first: a signal is not planned on a tick that
+  reduces, and a pending signal is withdrawn by one (HALT → `exitAll` at once, the HALT state is
+  announced afterwards). A signal goes before a risk-adding plan, which follows on a later tick.
+- **Safety.** Same pipeline as every step: plan critic, build + simulate, guard, approval, the
+  write-ahead executor, the LaneAction reconciler (matched as ours by decisionId) and the watchdog's
+  `GET /lanes/:lane/actions/:decisionId` (known). The guard never lets it bypass `DESK_ARM`,
+  `DRY_RUN`, the allowlist, idempotency, simulation, signer binding, single-in-flight or the lane's
+  `maxDeadlineAhead`; it holds it to MORE than a reducing step (rule `signal-policy`: never on a
+  paused lane, within the hourly cap; `gas-reserve`: it must leave the operator's reserve for exits).
+  A halted desk signs nothing optional: safe mode, revoked, disabled, advisory or a paused lane plan
+  no signal, and the executor refuses to sign or broadcast one for a desk that is not active, or
+  whose owner switched it to advisory while the step waited for approval.
+- **Approval.** Copilot asks the human for a signal like a risk-adding step (the first one can be
+  approved on camera); a denial never starts the rerange veto cooldown. `DESK_SIGNAL_AUTO=1` lets
+  copilot desks send signals without asking (they are neutral). Autopilot never waits for one.
+  `DESK_SIGNAL_GATES=0` turns the feature off.
+- **Meta.** `regime` = the announced regime's code, `gatesMask` = OR of the active gates' bits,
+  `reasonHash` = `keccak256(utf8(json))` of the canonical preimage
+  `{"at":<ms>,"from":{"gates":[…],"regime":"…"}|null,"lane":"0x…","source":"initial"|"transition","to":{…}}`
+  (keys sorted, gates in the table's order, lane lowercase). The preimage is stored per decisionId in
+  `gate_signals` (append-only, immutable), logged at `info` ("gate signal planned"), shown in
+  `GET /desks/:lane/status` (`lastSignal`) and served in full by `GET /desks/:lane/signals/:decisionId`
+  with `verified` (its hash equals the stored `reasonHash`).
+
+| `Meta.gatesMask` bit | Gate | Effect when active |
+|---|---|---|
+| `0x01` | CLOSED | reduce-only |
+| `0x02` | HALT | flat (`exitAll`) |
+| `0x04` | CORP-ACTION | reduce-only |
+| `0x08` | STALE-REF | reduce-only |
+| `0x10` | REOPEN-GUARD | reduce-only |
+| `0x20` | BOUND-PINNED | stub, never set |
+| `0x40` | WRAPPER-PREMIUM | stub, never set |
+| `0x80` | EVENT | stub, never set |
+
+`Meta.regime`: 0 unknown, 1 REGULAR, 2 EXTENDED, 3 OVERNIGHT, 4 WEEKEND_DARK, 5 HOLIDAY. Example: a
+Saturday with the fence closed announces `regime = 4`, `gatesMask = 0x01`.
+
 ## Safety model (enforced where noted)
 
 - **The LLM is never on the execution path.** It can only propose a tighten-only overlay, off in M2
@@ -126,7 +187,8 @@ Called only by the web's server-side route handlers (`web/app/api/desk/*`): the 
 | Route | Who | What |
 |---|---|---|
 | `POST /desks` | the lane's owner (Vault) | register a lane (its operator delegated by the same user); purges our copy of the Vault's own delegation |
-| `GET /desks/:lane/status` | owner | the desk view |
+| `GET /desks/:lane/status` | owner | the desk view (with `lastSignal`) |
+| `GET /desks/:lane/signals/:decisionId` | owner | a gate signal (bytes32 or ULID id) with its reasonHash preimage and `verified` |
 | `POST /desks/:lane/mode`, `POST /desks/:lane/approve` | owner | owner-signed mode change; copilot answer |
 | `GET /delegations/:operator` | the JWT must hold the operator wallet (a stored row must be this user's) | `{operator (checksummed), status: active \| revoked \| unknown, walletId, updatedAtMs}`; `unknown` until the webhook lands. Works before `POST /desks`: the wizard polls it after delegating. Never key material |
 | `GET /operator-address` | agent key only | the Plan B server-wallet operator |
@@ -244,7 +306,13 @@ for a key another campaign shares; default: no local rate limit).
 ```sh
 # the weekend suite alone, on one anvil pinned at the Saturday block (no second fork, no prefetch)
 FORK_BLOCK_NUMBER=66851211 FORK_PREFETCH_RADIUS=0 FORK_ANVIL_CUPS=150 pnpm test:fork test/fork/weekend.test.ts
+# gate signals at the same block: signal(Meta) lands (LaneAction SIGNAL, regime 4, CLOSED), rerange refused
+FORK_BLOCK_NUMBER=66851211 FORK_PREFETCH_RADIUS=0 pnpm test:fork test/fork/signal.test.ts
 ```
+
+The fork kit runs with `DESK_SIGNAL_GATES=0` unless a suite asks for signals (`env` of
+`deskUnderTest`), and so does the wiring harness (`signals` option), so the other suites keep their
+exact transaction sequences.
 
 - The deploy uses legacy transactions at a fixed price: on a fork pinned in the past, forge's EIP-1559
   estimate asks `eth_feeHistory` over pre-fork blocks, which Alchemy's 4663 endpoint refuses

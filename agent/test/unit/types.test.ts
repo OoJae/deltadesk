@@ -96,9 +96,9 @@ describe("constants", () => {
     expect(GATE_EFFECT.HALT).toBe("flat");
   });
 
-  it("the guard has 25 unique rules with dry-run last", () => {
-    expect(GUARD_RULES).toHaveLength(25);
-    expect(new Set(GUARD_RULES).size).toBe(25);
+  it("the guard has 26 unique rules with dry-run last", () => {
+    expect(GUARD_RULES).toHaveLength(26);
+    expect(new Set(GUARD_RULES).size).toBe(26);
     expect(GUARD_RULES.at(-1)).toBe("dry-run");
   });
 

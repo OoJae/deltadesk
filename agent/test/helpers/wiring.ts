@@ -223,6 +223,10 @@ export function laneActionLog(p: {
   txHash: Hex;
   blockNumber: bigint;
   logIndex?: number;
+  /** The Meta the lane logs (defaults: regime 1, gatesMask 0, a fixed reasonHash). */
+  regime?: number;
+  gatesMask?: number;
+  reasonHash?: Hex;
 }): RawLog {
   const topics = encodeEventTopics({
     abi: deskLaneAbi,
@@ -238,7 +242,7 @@ export function laneActionLog(p: {
       { type: "bytes32" },
       { type: "address" },
     ],
-    [[], 0n, 1, 0, keccak256("0x02"), p.caller],
+    [[], 0n, p.regime ?? 1, p.gatesMask ?? 0, p.reasonHash ?? keccak256("0x02"), p.caller],
   );
   return {
     address: (p.lane ?? LANE_A).toLowerCase() as Address,
@@ -269,6 +273,8 @@ export interface World {
   sensorError: Error | null;
   /** F relative to the pool mid, in bp (HL moves, the pool stays put); default 0. */
   fShiftBps: number;
+  /** The lane's paused() flag (the owner or guardian halted it); default false. */
+  paused?: boolean;
 }
 
 export function inRangePosition(tokenId = 42n): NpmPosition {
@@ -305,6 +311,7 @@ export function snapshotOf(world: World, nowMs: number): DeskSnapshot {
       lane: {
         ...chain.lane,
         laneAddress: reported,
+        paused: world.paused ?? false,
         owner: world.owner,
         operator: world.operator,
         caps: { ...world.caps },
@@ -386,6 +393,11 @@ export interface HarnessOptions {
   db?: DeskDbHandle;
   clock?: TestClock;
   chain?: WiringChain;
+  /**
+   * Gate signals (DESK_SIGNAL_GATES). Off by default here so the other proofs keep their exact
+   * transaction sequences; true (or a partial config) turns them on.
+   */
+  signals?: boolean | Partial<AppConfig["signal"]>;
 }
 
 export interface Harness {
@@ -418,6 +430,11 @@ export function harness(o: HarnessOptions = {}): Harness {
     ...base,
     safety: { ...base.safety, armed: o.armed ?? true, dryRun: o.dryRun ?? false },
     hl: { ...base.hl, mode: o.hl?.mode ?? "paper", armed: o.hl?.armed ?? false },
+    signal: {
+      ...base.signal,
+      enabled: o.signals !== undefined && o.signals !== false,
+      ...(typeof o.signals === "object" ? o.signals : {}),
+    },
   };
   if (o.config !== undefined) cfg = o.config(cfg);
   const baseSigner = o.signer ?? createLocalSigner({ privateKey: ANVIL_KEY_0, rpcUrl: LOOPBACK });

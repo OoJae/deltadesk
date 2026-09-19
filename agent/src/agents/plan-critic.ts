@@ -286,8 +286,12 @@ export function critiquePlan(input: PlanCriticInput): PlanCriticResult {
   const adding = plan.actions.filter((a) => riskClassOf(a) === "adding");
   if (adding.length > 0 && mode !== "normal")
     problems.push(`risk-adding in ${mode} mode (${regime.activeGates.join(", ")})`);
-  if (mode === "flat" && executable.some((a) => a.kind !== "exitAll" && a.kind !== "pause")) {
-    problems.push("flat mode allows only exitAll / pause");
+  // A gate signal moves nothing: it may announce a flat (HALT) state too.
+  if (
+    mode === "flat" &&
+    executable.some((a) => a.kind !== "exitAll" && a.kind !== "pause" && a.kind !== "signal")
+  ) {
+    problems.push("flat mode allows only exitAll / pause / signal");
   }
   if (adding.length > 0) {
     for (const src of ["chain", "hl", "k"] as const) {
