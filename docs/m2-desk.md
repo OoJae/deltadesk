@@ -79,32 +79,40 @@ addresses to `…/address/<address>`.
 | Foreign LaneActions, expected none | TBD |
 | `pnpm status` excerpt | TBD |
 
-## 3 · Dynamic policy denial
+## 3 · Dynamic delegation and policy denial (recorded 2026-09-19, 15:10–15:40 UTC)
 
-The Dynamic setup:
+**Lane A**: `0x7f8968734E613f509991D3392074CF7f1e4bd662` · Vault (owner) `0x397634DfbE552eBA34eFF652fe4ca0B05794B85A` ·
+Operator (delegated) `0x86629b04811741860E211c84003E3B143d6E3678` · Guardian `0x01BFF09B19F7eedcdD33ba0Da1bA8f191707d89f`.
+Created by the Vault through the `/desk` wizard; on-chain checks: `listed(lane) = true`, `lanesOf(vault) = [lane]`,
+owner/operator/guardian as above, `paused = false`, `riskAddingOpen() = (false, 5)` (Saturday: market closed).
 
-- Delegated Access on, with prompt on sign-in OFF and requires-delegation OFF;
-- the webhook URL and secret, and the RSA public key from `pnpm gen-rsa`;
-- the policy: chain `[4663]`, allowlist `[lane]`, value 0, `blockExport`, set on the address the wizard predicted,
-  before `createLane` and the delegation (`docs/m2-spike-s1.md`, Phase 4).
+**Delegation (Operator only).** Dynamic shows the Operator delegated and the Vault not delegated. Two integration bugs
+surfaced on the first real delivery and were fixed the same hour: Dynamic's envelope carries `"userId": null` (the agent's
+schema accepted absent but not null, so every delivery got 400; `205fee6`), and the documented payload's `publicKey` is the
+address (handled, plus public-key derivation for other formats; `3457c19`). The failed message
+(`eventId 3953471a…`) was then redelivered through Dynamic's API (`POST …/webhooks/{id}/messages/{messageId}/redeliver`)
+and processed; the wizard reads "Operator delegated and confirmed by desk-agent; Vault not delegated" and
+`POST /desks` registered the desk (mode advisory).
 
-The Vault sends `createLane` before any delegation, so the webhook refuses a later Vault delegation and stores no
-`delegations` row: `GET /delegations/<vault>` reads `unknown` whether or not the Vault was delegated. The evidence that
-only the Operator was delegated is the created-event count and Dynamic's own view of the Vault.
+**Signer check** (`pnpm signer-check --lane <lane>` inside the `desk-agent` service; nothing is ever broadcast):
+the delegated Operator signed a lane `signal()` on chain 4663 and the bytes verified (parse == request, recover ==
+operator): `0x057c22b9…a15c`, then `0x7974117b…0330`.
 
-| Field | Value |
+**Policy findings (Spike S1 question 5).**
+
+| Probe (same delegated Operator key) | Result |
 |---|---|
-| Delegation webhook received (`eventId`, time) | TBD |
-| `wallet.delegation.created` rows in `webhook_events`, by status (expected exactly 1, `processed`, the Operator's; a Vault delegation adds an `ignored` one) | TBD |
-| "A lane OWNER wallet was delegated" alerts (expected none) | TBD |
-| Vault's delegation state in the Dynamic dashboard (expected not delegated) | TBD |
-| `GET /delegations/<operator>` → `active` | TBD |
-| `GET /delegations/<vault>` → `unknown` (supporting evidence only) | TBD |
-| `pnpm signer-check --lane <lane>`: lane `signal()` signed, never broadcast (hash) | TBD |
-| Staged `USDG.transfer(owner, 1)` outcome (`SIGNER_DENIED` expected) | TBD |
-| Denial as Dynamic reported it (code / message, secrets redacted) | TBD |
-| Record under `agent/data/signer-check/` | TBD |
-| `signer-check` exit code (0 = signed + denial recorded) | TBD |
+| Wallet-level policy layer on the Operator: chain `[4663]`, allowlist `[lane]`, `maxPerCall 0` (accepted by the API, rule `9dc3bf75…`) | **not enforced**: the operator's `USDG.transfer(owner, 1)` on 4663 was signed (wallet/signer layers are early access) |
+| Environment-wide rule for chain 4663 | **refused by Dynamic's API**: `Unsupported chainIds for EVM: 4663` |
+| Environment rule on Base 8453, allowlist `[lane address]` (rule `39d8c2f6…`): transfer of Base USDC `0x8335…2913` to the Vault (the staged prompt injection) | **DENIED**: Dynamic's co-signer never signed; the MPC session was dropped after 61.6 s (`WebSocket protocol error: Connection reset without closing handshake`) |
+| Control: Base 8453, destination = the allowlisted address | signed in 2.3 s |
+| Control: chain 4663, `USDG.transfer` | signed in 2.0 s |
+
+So Dynamic's policy engine does enforce for the delegated Operator, on the chains it supports; on Robinhood Chain the
+enforcing fences are DeltaDesk's own: the lane contract (the Operator can never withdraw, approve, transfer or change
+settings: invariants I1/I8 on local and fork campaigns, `contracts/reports/`) and the agent's ABI, which cannot even
+encode a transfer. Feedback for Dynamic: support chain 4663 in policies, and surface a denial as a policy error rather than
+a dropped signing session.
 
 ## 4 · The live mint (~$50, copilot)
 
