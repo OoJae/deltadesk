@@ -1,0 +1,13 @@
+{
+  "name": "deltadesk-demo",
+  "private": true,
+  "type": "module",
+  "description": "DeltaDesk demo: Playwright scene recorder + ffmpeg build",
+  "scripts": {
+    "record": "node record/run.mjs",
+    "build": "bash build/build.sh"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "_comment": "Spoken-only substitutions for the macOS say narration (captions keep the original text). Keys are regex sources, applied in order.",
+  "DeltaDesk": "Delta Desk",
+  "\\bBankr\\b": "Banker",
+  "\\bNVDA\\b": "Nvidia",
+  "\\bLPs\\b": "L-Ps",
+  "\\bLP\\b": "L-P",
+  "\\bUSDG\\b": "U-S-D-G",
+  "\\bUSDC\\b": "U-S-D-C",
+  "\\bx402\\b": "x four oh two",
+  "24/7": "twenty-four seven",
+  "lp-truth": "L-P truth",
+  "LaneAction": "lane action",
+  "\\brerange\\b": "re-range",
+  "Blockscout": "Block scout",
+  "on-chain": "on chain"
+}

@@ -1,0 +1,30 @@
+{
+  "_comment": "URLs the scenes drive. Fill the placeholders below as each fact goes live, then re-record the scenes that need them (see demo/README.md). An empty placeholder makes its scene skip, and the build shows a PENDING card and uses the beat's draft narration instead.",
+  "webUrl": "https://web-production-10951.up.railway.app",
+  "apiUrl": "https://core-production-512e.up.railway.app",
+  "x402Base": "https://x402.bankr.bot/0xd8d5b9389721258bcdfa7ac1306af6330e5634cd",
+  "baseExplorer": "https://base.blockscout.com",
+  "rhExplorer": "https://robinhoodchain.blockscout.com",
+  "rhRpc": "https://rpc.mainnet.chain.robinhood.com",
+  "paidCallTx": "0x309ddc0cbc51eccddf649fa001a25ecdc049179e402bc6dad91e798c8c8e6708",
+  "paidCallLabel": {
+    "_source": "README.md, Live now: 'First settled x402 call (a self-test from our own Bankr wallet)'",
+    "title": "First settled x402 call: safe-to-lp, $0.005 USDC on Base, our own self-test",
+    "tag": "First paid x402 call: our own self-test",
+    "sub": "safe-to-lp?pool=NVDA · $0.005 USDC · payer and payee: DeltaDesk's Bankr wallet 0xd8d5…34cd"
+  },
+  "tearsheetWallet": "0x6d1eb2cbe55ed1dc958a9e6f715ee70266ea6626",
+  "tearsheetRole": "operator",
+  "zoom": 1.5,
+  "placeholders": {
+    "DESK_URL": "https://web-production-10951.up.railway.app/desk",
+    "FACTORY_ADDRESS": "0x6968B97974aF2ba51537e751c043d5ba48d663B3",
+    "LANE_ADDRESS": "0x7f8968734E613f509991D3392074CF7f1e4bd662",
+    "SIGNAL_TX": "0xddbc1b92b20332ddee6e2ec587e27246021c42b2b51444e848fab7e0d4fe7375",
+    "DENIAL_LOG": "docs/m2-desk.md",
+    "CONSOLE_URL": "",
+    "REPLAY_SEP12_LINE": "",
+    "GITHUB_URL": "",
+    "DEMO_VIDEO_URL": ""
+  }
+}
