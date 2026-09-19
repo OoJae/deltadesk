@@ -147,7 +147,41 @@ def health():
 
 @app.get("/pipeline", dependencies=[Depends(premium)])
 def pipeline():
-    return _pipeline_state()
+    """Step states; while a step runs, its live log tail (data/logs/<step>.log)."""
+    st = _pipeline_state()
+    for name, v in st.items():
+        started, ran = v.get("started_at") or 0, v.get("ran_at") or 0
+        f = live.DATA / "logs" / f"{name}.log"
+        if started > ran and f.exists():
+            v["running_for_s"] = round(time.time() - started)
+            v["live_tail"] = f.read_text(errors="replace")[-2000:]
+    return st
+
+
+RAW_DIR = live.DATA / "raw"
+
+
+def _raw_path(source: str, name: str | None = None) -> Path:
+    ok = lambda x: x.replace("_", "").replace("-", "").replace(".", "").isalnum() and not x.startswith(".")  # noqa: E731
+    if not ok(source) or (name is not None and (not ok(name) or not name.endswith(".parquet"))):
+        raise HTTPException(404, "not found")
+    p = RAW_DIR / source if name is None else RAW_DIR / source / name
+    if not p.exists():
+        raise HTTPException(404, "not found")
+    return p
+
+
+@app.get("/admin/raw/{source}", dependencies=[Depends(premium)])
+def raw_files(source: str):
+    """Raw HyperSync parquet files of one source (public chain data; for syncing a dev machine)."""
+    d = _raw_path(source)
+    return [{"name": f.name, "bytes": f.stat().st_size} for f in sorted(d.glob("*.parquet"))]
+
+
+@app.get("/admin/raw/{source}/{name}", dependencies=[Depends(premium)])
+def raw_file(source: str, name: str):
+    from fastapi.responses import FileResponse
+    return FileResponse(_raw_path(source, name), media_type="application/octet-stream", filename=name)
 
 
 @app.get("/fair-value/{pool}")

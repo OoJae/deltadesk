@@ -86,3 +86,22 @@ def test_hl_candles_merge_keeps_history_and_prefers_fresh():
     m = merge(old, new)
     assert m["t_open_ms"].to_list() == [1, 2, 3, 4]                   # old history (1, 2) survives
     assert m.filter(pl.col("t_open_ms") == 3)["c"].item() == 31.0     # fresh value wins
+
+
+def test_raw_download_is_gated_and_confined(tmp_path, monkeypatch):
+    import polars as pl
+    from fastapi.testclient import TestClient
+
+    from api import app as appmod
+
+    (tmp_path / "base_npm").mkdir()
+    pl.DataFrame({"x": [1]}).write_parquet(tmp_path / "base_npm" / "hs_1_2.parquet")
+    monkeypatch.setattr(appmod, "RAW_DIR", tmp_path)
+    monkeypatch.setattr(appmod, "API_KEY", "k")
+    c = TestClient(appmod.app)
+    assert c.get("/admin/raw/base_npm").status_code == 402                                    # key required
+    h = {"x-deltadesk-key": "k"}
+    assert c.get("/admin/raw/base_npm", headers=h).json() == [{"name": "hs_1_2.parquet", "bytes": (tmp_path / "base_npm" / "hs_1_2.parquet").stat().st_size}]
+    assert c.get("/admin/raw/base_npm/hs_1_2.parquet", headers=h).status_code == 200
+    for bad in ("/admin/raw/..%2F..%2Fetc/passwd", "/admin/raw/base_npm/..%2F..%2F.env", "/admin/raw/base_npm/notes.txt"):
+        assert c.get(bad, headers=h).status_code == 404

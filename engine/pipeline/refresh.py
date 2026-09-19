@@ -25,6 +25,7 @@ ENGINE = Path(__file__).resolve().parents[1]
 DATA = ENGINE.parent / "data"
 STATE = DATA / "pipeline_state.json"
 LOCK = DATA / "pipeline.lock"
+LOGS = DATA / "logs"
 
 STEPS = [
     # (name, [module, *args], min interval seconds). Core sources first so the study, tearsheets and League exist
@@ -70,12 +71,20 @@ def main():
             if not full and time.time() - last < every:
                 continue
             t0 = time.time()
-            r = subprocess.run([sys.executable, "-m", *cmd], cwd=ENGINE, capture_output=True, text=True, timeout=4 * 3600)
-            ok = r.returncode == 0
-            tail = (r.stdout + r.stderr)[-1500:]
-            if r.returncode < 0:  # killed by a signal: on the server this is almost always the OOM killer (SIGKILL)
-                tail += f"\n[killed by signal {-r.returncode}{' (likely out of memory)' if r.returncode == -9 else ''}]"
-            state[name] = {"ok_at": time.time() if ok else last, "ran_at": time.time(), "ok": ok, "rc": r.returncode,
+            LOGS.mkdir(parents=True, exist_ok=True)
+            log = LOGS / f"{name}.log"
+            state[name] = {**state.get(name, {}), "started_at": t0}
+            STATE.write_text(json.dumps(state, indent=1))
+            with log.open("w") as fh:  # streamed, so a long step's progress is visible while it runs (GET /pipeline)
+                try:
+                    rc = subprocess.run([sys.executable, "-u", "-m", *cmd], cwd=ENGINE, stdout=fh, stderr=subprocess.STDOUT, timeout=4 * 3600).returncode
+                except subprocess.TimeoutExpired:
+                    rc = -15
+            ok = rc == 0
+            tail = log.read_text(errors="replace")[-1500:]
+            if rc < 0:  # killed by a signal: on the server this is almost always the OOM killer (SIGKILL)
+                tail += f"\n[killed by signal {-rc}{' (likely out of memory)' if rc == -9 else ''}]"
+            state[name] = {"ok_at": time.time() if ok else last, "ran_at": time.time(), "ok": ok, "rc": rc,
                            "secs": round(time.time() - t0, 1), "tail": tail}
             print(f"{name}: {'ok' if ok else 'FAILED'} in {state[name]['secs']}s", flush=True)
             STATE.write_text(json.dumps(state, indent=1))
