@@ -1,0 +1,786 @@
+// GENERATED from contracts/abi/IDeskLaneFactory.json (the FROZEN M2 interface snapshot). Do not edit by hand.
+// Regenerate: node web/lib/desk/abi/sync.mjs
+
+export const deskLaneFactoryAbi = [
+  {
+    "type": "function",
+    "name": "V3_FACTORY",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "acceptAdmin",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "admin",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "ceilings",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "tuple",
+        "internalType": "struct IDeskTypes.Caps",
+        "components": [
+          {
+            "name": "maxDeployUsd6",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "turnoverUsd6PerDay",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "placeBandBps",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "maxTickDelta",
+            "type": "uint24",
+            "internalType": "uint24"
+          },
+          {
+            "name": "minWidthTicks",
+            "type": "uint24",
+            "internalType": "uint24"
+          },
+          {
+            "name": "maxWidthTicks",
+            "type": "uint24",
+            "internalType": "uint24"
+          },
+          {
+            "name": "reranges1h",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "reranges24h",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "minRerangeInterval",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "maxDeadlineAhead",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "maxRanges",
+            "type": "uint8",
+            "internalType": "uint8"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "createLane",
+    "inputs": [
+      {
+        "name": "p",
+        "type": "tuple",
+        "internalType": "struct IDeskLaneFactory.CreateParams",
+        "components": [
+          {
+            "name": "owner",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "operator",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "guardian",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "laneId",
+            "type": "uint8",
+            "internalType": "uint8"
+          },
+          {
+            "name": "kind",
+            "type": "uint8",
+            "internalType": "uint8"
+          },
+          {
+            "name": "pool",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "caps",
+            "type": "tuple",
+            "internalType": "struct IDeskTypes.Caps",
+            "components": [
+              {
+                "name": "maxDeployUsd6",
+                "type": "uint64",
+                "internalType": "uint64"
+              },
+              {
+                "name": "turnoverUsd6PerDay",
+                "type": "uint64",
+                "internalType": "uint64"
+              },
+              {
+                "name": "placeBandBps",
+                "type": "uint16",
+                "internalType": "uint16"
+              },
+              {
+                "name": "maxTickDelta",
+                "type": "uint24",
+                "internalType": "uint24"
+              },
+              {
+                "name": "minWidthTicks",
+                "type": "uint24",
+                "internalType": "uint24"
+              },
+              {
+                "name": "maxWidthTicks",
+                "type": "uint24",
+                "internalType": "uint24"
+              },
+              {
+                "name": "reranges1h",
+                "type": "uint16",
+                "internalType": "uint16"
+              },
+              {
+                "name": "reranges24h",
+                "type": "uint16",
+                "internalType": "uint16"
+              },
+              {
+                "name": "minRerangeInterval",
+                "type": "uint32",
+                "internalType": "uint32"
+              },
+              {
+                "name": "maxDeadlineAhead",
+                "type": "uint32",
+                "internalType": "uint32"
+              },
+              {
+                "name": "maxRanges",
+                "type": "uint8",
+                "internalType": "uint8"
+              }
+            ]
+          },
+          {
+            "name": "salt",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          }
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "name": "lane",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "implementations",
+    "inputs": [
+      {
+        "name": "kind",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "isLane",
+    "inputs": [
+      {
+        "name": "lane",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "lanesOf",
+    "inputs": [
+      {
+        "name": "owner",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address[]",
+        "internalType": "address[]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "poolAllowed",
+    "inputs": [
+      {
+        "name": "pool",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "kind",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "predictLane",
+    "inputs": [
+      {
+        "name": "p",
+        "type": "tuple",
+        "internalType": "struct IDeskLaneFactory.CreateParams",
+        "components": [
+          {
+            "name": "owner",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "operator",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "guardian",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "laneId",
+            "type": "uint8",
+            "internalType": "uint8"
+          },
+          {
+            "name": "kind",
+            "type": "uint8",
+            "internalType": "uint8"
+          },
+          {
+            "name": "pool",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "caps",
+            "type": "tuple",
+            "internalType": "struct IDeskTypes.Caps",
+            "components": [
+              {
+                "name": "maxDeployUsd6",
+                "type": "uint64",
+                "internalType": "uint64"
+              },
+              {
+                "name": "turnoverUsd6PerDay",
+                "type": "uint64",
+                "internalType": "uint64"
+              },
+              {
+                "name": "placeBandBps",
+                "type": "uint16",
+                "internalType": "uint16"
+              },
+              {
+                "name": "maxTickDelta",
+                "type": "uint24",
+                "internalType": "uint24"
+              },
+              {
+                "name": "minWidthTicks",
+                "type": "uint24",
+                "internalType": "uint24"
+              },
+              {
+                "name": "maxWidthTicks",
+                "type": "uint24",
+                "internalType": "uint24"
+              },
+              {
+                "name": "reranges1h",
+                "type": "uint16",
+                "internalType": "uint16"
+              },
+              {
+                "name": "reranges24h",
+                "type": "uint16",
+                "internalType": "uint16"
+              },
+              {
+                "name": "minRerangeInterval",
+                "type": "uint32",
+                "internalType": "uint32"
+              },
+              {
+                "name": "maxDeadlineAhead",
+                "type": "uint32",
+                "internalType": "uint32"
+              },
+              {
+                "name": "maxRanges",
+                "type": "uint8",
+                "internalType": "uint8"
+              }
+            ]
+          },
+          {
+            "name": "salt",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          }
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "name": "lane",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "proposeAdmin",
+    "inputs": [
+      {
+        "name": "newAdmin",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setCeilings",
+    "inputs": [
+      {
+        "name": "ceilings",
+        "type": "tuple",
+        "internalType": "struct IDeskTypes.Caps",
+        "components": [
+          {
+            "name": "maxDeployUsd6",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "turnoverUsd6PerDay",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "placeBandBps",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "maxTickDelta",
+            "type": "uint24",
+            "internalType": "uint24"
+          },
+          {
+            "name": "minWidthTicks",
+            "type": "uint24",
+            "internalType": "uint24"
+          },
+          {
+            "name": "maxWidthTicks",
+            "type": "uint24",
+            "internalType": "uint24"
+          },
+          {
+            "name": "reranges1h",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "reranges24h",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "minRerangeInterval",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "maxDeadlineAhead",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "maxRanges",
+            "type": "uint8",
+            "internalType": "uint8"
+          }
+        ]
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setImplementation",
+    "inputs": [
+      {
+        "name": "kind",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "implementation",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setPoolAllowed",
+    "inputs": [
+      {
+        "name": "pool",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "kind",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "allowed",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "event",
+    "name": "AdminChanged",
+    "inputs": [
+      {
+        "name": "admin",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "AdminProposed",
+    "inputs": [
+      {
+        "name": "admin",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "CeilingsSet",
+    "inputs": [
+      {
+        "name": "ceilings",
+        "type": "tuple",
+        "indexed": false,
+        "internalType": "struct IDeskTypes.Caps",
+        "components": [
+          {
+            "name": "maxDeployUsd6",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "turnoverUsd6PerDay",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "placeBandBps",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "maxTickDelta",
+            "type": "uint24",
+            "internalType": "uint24"
+          },
+          {
+            "name": "minWidthTicks",
+            "type": "uint24",
+            "internalType": "uint24"
+          },
+          {
+            "name": "maxWidthTicks",
+            "type": "uint24",
+            "internalType": "uint24"
+          },
+          {
+            "name": "reranges1h",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "reranges24h",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "minRerangeInterval",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "maxDeadlineAhead",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "maxRanges",
+            "type": "uint8",
+            "internalType": "uint8"
+          }
+        ]
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "ImplementationSet",
+    "inputs": [
+      {
+        "name": "kind",
+        "type": "uint8",
+        "indexed": true,
+        "internalType": "uint8"
+      },
+      {
+        "name": "implementation",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "LaneCreated",
+    "inputs": [
+      {
+        "name": "owner",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "lane",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "laneId",
+        "type": "uint8",
+        "indexed": true,
+        "internalType": "uint8"
+      },
+      {
+        "name": "kind",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "uint8"
+      },
+      {
+        "name": "pool",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      },
+      {
+        "name": "operator",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "PoolAllowed",
+    "inputs": [
+      {
+        "name": "pool",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "kind",
+        "type": "uint8",
+        "indexed": true,
+        "internalType": "uint8"
+      },
+      {
+        "name": "allowed",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "CapsAboveCeiling",
+    "inputs": [
+      {
+        "name": "field",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "NotAdmin",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "OperatorInvalid",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "PoolMismatch",
+    "inputs": [
+      {
+        "name": "pool",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "PoolNotAllowed",
+    "inputs": [
+      {
+        "name": "pool",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "UnknownKind",
+    "inputs": [
+      {
+        "name": "kind",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ]
+  }
+] as const;
