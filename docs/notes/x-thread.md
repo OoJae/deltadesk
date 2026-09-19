@@ -18,19 +18,19 @@ Handles:
 - Optionally add `@Uniswap` to post 4 (256 characters then), and write `@igoryuzo` in place of "Igor" in post 1, a
   courtesy tag for the quote (276 characters then; appending the tag instead would go over 280).
 
-## 1/9 (271 characters as drafted)
+## 1/9
 
 ```
 Igor asked: "If I made $80 in fees but lost $50 to informed flow, that would be good to know."
 
 We measured it for every LP in Robinhood Chain's NVDA, SPY, TSLA and QQQ/SPY pools.
 
-NVDA/USDG: LPs earned $362.9k in fees. Informed flow took back $289.5k.
+NVDA/USDG: LPs earned $367.3k in fees. Informed flow took back $289.1k.
 
 Meet DeltaDesk 🧵
 ```
 
-Media: Study page screenshot: the hour-of-week heatmap (fees vs picked off), https://web-production-10951.up.railway.app/study
+Media: `x-images/04-study-account.png` (the account: $367.3k fees, −$289.1k picked off, $78.2k left)
 
 ## 2/9 (259 characters as drafted)
 
@@ -64,7 +64,7 @@ Fees vs informed flow vs IL vs gas vs net, per $1k, reconciled to on-chain colle
 https://web-production-10951.up.railway.app/tearsheet
 ```
 
-Media: Tearsheet screenshot of a public wallet (address cropped)
+Media: `x-images/07-league.png` (the LP League; or a tearsheet you like, address cropped)
 
 ## 5/9 (238 characters as drafted)
 
@@ -88,15 +88,16 @@ The desk: a lane contract on Robinhood Chain that holds your Uniswap position.
 An agent runs it through a separate @dynamic_xyz delegated wallet, never your owner wallet. The contract can only pay you, fences placements vs Chainlink, and refuses to add risk on weekends.
 ```
 
-Media: 30-second clip from the demo: the lane's LaneAction on Blockscout, then the Dynamic denial
+Media: `x-images/08-lane.png` (the live lane: Vault, Operator, Guardian, $50.77, risk-adding closed)
 
-## 8/9 (254 characters as drafted)
+## 8/9
 
 ```
-Today, a Saturday, the agent's first on-chain decision was to stay out.
+Today, a Saturday, the agent's first on-chain decision was to stay out, and to say so on-chain:
 
-signal() tx: https://robinhoodchain.blockscout.com/tx/0xddbc1b92b20332ddee6e2ec587e27246021c42b2b51444e848fab7e0d4fe7375
-A staged malicious transfer from the agent's wallet: Dynamic's co-signer refused it (on Base; Dynamic policies don't cover Robinhood Chain yet, where our contract is the fence).
+https://robinhoodchain.blockscout.com/tx/0xddbc1b92b20332ddee6e2ec587e27246021c42b2b51444e848fab7e0d4fe7375
+
+A staged malicious transfer from its wallet was refused by @dynamic_xyz's co-signer.
 
 First live mint Monday, posted here.
 ```
@@ -112,6 +113,24 @@ Demo: https://youtu.be/pjpZgsKzxQY
 Code: https://github.com/OoJae/deltadesk
 Built for Runtime Agent Week
 ```
+
+## Images (in `docs/notes/x-images/`, captured from the live site)
+
+| File | Shows | Suggested post |
+|---|---|---|
+| `01-hero.png` | the landing: "Market making stocks was a closed club. We published its books." with the engraved relief | 1 (alt) or 9 |
+| `02-act-gap.png` | act N° 03 of the weekend replay: the gap opens, $4.24 paid vs $3.32 earned | 2 |
+| `03-act-lane-aside.png` | act N° 04: the lane stands aside, 0 risk-adding steps while closed | 8 |
+| `04-study-account.png` | the study's account: $367.3k fees, −$289.1k picked off, $78.2k left | **1** |
+| `06-study-scroll.png` | pool edges and the hour-of-week view | 2 |
+| `07-league.png` | the LP League, ~1,000 managers ranked against holding | **4** |
+| `08-lane.png` | the live lane: roles, $50.77, risk-adding closed | **7** |
+| `09-console.png` | the public desk console: agent healthy, both gate signals executed | 7 (alt) |
+| `10-signal-tx.png` | Blockscout: the Operator called `signal` on the lane, success | **8** |
+| `12-laneaction-log.png` | the decoded `LaneAction` log of that transaction | 8 (alt) |
+| `11-brand.png` | the brand book and the Delta seal | 9 (alt) |
+
+X shows up to 4 images per post. One strong image per post reads better than a grid.
 
 ## Monday follow-up (post when it happens)
 
