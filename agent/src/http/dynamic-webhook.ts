@@ -73,12 +73,18 @@ export function signDynamicPayload(rawBody: Uint8Array | string, secret: string)
   return createHmac("sha256", secret).update(rawBody).digest("hex");
 }
 
+/** Dynamic sends absent fields as null (e.g. a top-level `"userId": null` on delegation events). */
+const optStr = z
+  .string()
+  .nullish()
+  .transform((v) => v ?? undefined);
+
 const EnvelopeSchema = z.object({
   eventId: z.string().min(1).max(200),
   eventName: z.string().min(1).max(200),
-  environmentId: z.string().optional(),
-  timestamp: z.string().optional(),
-  userId: z.string().optional(),
+  environmentId: optStr,
+  timestamp: optStr,
+  userId: optStr,
   data: z.unknown(),
 });
 
@@ -93,12 +99,12 @@ const EncryptedSchema = z.object({
 
 const CreatedSchema = z.object({
   walletId: z.string().min(1).max(200),
-  userId: z.string().min(1).optional(),
-  chain: z.string().optional(),
-  accountAddress: z.string().optional(),
-  walletAddress: z.string().optional(),
-  address: z.string().optional(),
-  publicKey: z.string().optional(),
+  userId: optStr,
+  chain: optStr,
+  accountAddress: optStr,
+  walletAddress: optStr,
+  address: optStr,
+  publicKey: optStr,
   encryptedDelegatedShare: EncryptedSchema.optional(),
   encryptedDelegatedKeyShare: EncryptedSchema.optional(),
   encryptedWalletApiKey: EncryptedSchema,

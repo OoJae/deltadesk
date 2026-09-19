@@ -503,3 +503,21 @@ describe("Dynamic's documented payload carries a publicKey, not an address", () 
     expect(s.db.getDelegation("wallet-op-1")).toMatchObject({ accountAddress: OPERATOR_ADDR });
   });
 });
+
+describe("the real Dynamic envelope (observed 2026-09-19)", () => {
+  it("accepts a top-level userId: null, extra fields (messageId, webhookId, environmentName, shareSetId) and publicKey = address", async () => {
+    const s = setup();
+    s.db.insertDesk(deskRow());
+    const ev = createdEvent("evt-real-1", { shareSetId: "set-1" });
+    const real = {
+      ...ev,
+      userId: null,
+      messageId: "msg-1",
+      webhookId: "wh-1",
+      environmentName: "sandbox",
+    };
+    const r = await s.post(real);
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ ok: true, address: OPERATOR_ADDR, lane: LANE });
+  });
+});
