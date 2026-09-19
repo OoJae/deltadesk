@@ -3,7 +3,8 @@
     uv run uvicorn api.app:app --port 8787
 
 Endpoints (JSON):
-  GET /health
+  GET /health                   liveness + pipeline step status
+  GET /pipeline                 full pipeline state with log tails (premium)
   GET /fair-value/{pool}        HL-derived fair value vs pool mid, gap in bp, Chainlink freshness
   GET /safe-to-lp/{pool}        ALLOW / CAUTION / BLOCK with reasons (gap vs fair value, regime, historical toxicity)
   GET /pool-toxicity/{pool}     historical LP edge by regime / hour-of-week, current hour's record
@@ -16,6 +17,7 @@ Pools: NVDA, SPY, TSLA, QQQ-SPY (or the full key, e.g. NVDA-USDG).
 from __future__ import annotations
 
 import hmac
+import json
 import os
 import time
 from datetime import datetime
@@ -128,9 +130,23 @@ def assess(gap_bps: float, regime: live.Regime, hour: dict | None, chainlink_age
     return {"verdict": verdict, "reasons": reasons}
 
 
+def _pipeline_state() -> dict:
+    f = live.DATA / "pipeline_state.json"
+    try:
+        return json.loads(f.read_text()) if f.exists() else {}
+    except (OSError, ValueError):
+        return {}
+
+
 @app.get("/health")
 def health():
-    return {"ok": True, "time": time.time()}
+    steps = {k: {"ok": v.get("ok"), "ran_at": v.get("ran_at"), "secs": v.get("secs")} for k, v in _pipeline_state().items()}
+    return {"ok": True, "time": time.time(), "pipeline_running": (live.DATA / "pipeline.lock").exists(), "pipeline": steps}
+
+
+@app.get("/pipeline", dependencies=[Depends(premium)])
+def pipeline():
+    return _pipeline_state()
 
 
 @app.get("/fair-value/{pool}")
