@@ -137,6 +137,22 @@ way, tx [`0xbe80e98b…3223`](https://robinhoodchain.blockscout.com/tx/0xbe80e98
 The agent reconciled the LaneAction as its own (decision `executed`, execution `confirmed`); the watchdog's cross-check route
 knows the decisionId. Every later regime or gate change on this lane is announced the same way (≤ 6 per hour, 60 s dwell).
 
+## 3c · Funding lane A (Sat 2026-09-19)
+
+The owner sent 25 USDG directly to the lane (balance read on-chain: 25.796085 USDG) and 24.990977 USDG to the deployer
+wallet for conversion, because the M2 lane deliberately cannot swap. The deployer swapped it on the NVDA/USDG 0.05% pool
+through SwapRouter02 `0xCaf6…5cb2` with the **lane as recipient** and a 0.5% minimum-output bound (QuoterV2 quote
+0.112257515 NVDA; min 0.111696227):
+
+| Step | Tx |
+|---|---|
+| `USDG.approve(SwapRouter02, 24.990977)` (exact amount; allowance back to 0 after the swap) | [`0x31f67a99…9606`](https://robinhoodchain.blockscout.com/tx/0x31f67a994ced553ff2e0821d04152cb4e6198f534ee92a318566bb9331859606) |
+| `exactInputSingle(USDG→NVDA, fee 500, recipient = lane)`: 0.112258293 NVDA out, 158,911 gas | [`0x15d6667e…906c`](https://robinhoodchain.blockscout.com/tx/0x15d6667e38b7da82ab66c4c41d57f39f6743e56ba0e739cbe2fc80a64e53906c) |
+
+Lane A now holds **25.796085 USDG + 0.112258293 NVDA** (≈ $50.75 at F = 222.29); the deployer holds no USDG. Cost of the
+conversion ≈ 0.14% (0.05% pool fee plus the pool's ~9 bp weekend premium to fair). Nothing is placed before Monday: the
+fence keeps risk-adding closed until Mon 01:00 UTC, and the first mint waits for the owner's copilot approval.
+
 ## 4 · The live mint (~$50, copilot)
 
 Run in a regular session, 10:00–15:30 ET, outside 09:20–09:45, with the desk in copilot and armed (`DRY_RUN=false`,
