@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 
 import httpx
 
@@ -45,21 +46,27 @@ def sync(source: str, mirror: bool, c: httpx.Client) -> None:
     if extra and not mirror:
         print(f"{source}: SKIPPED, {len(extra)} local file(s) not on the server (e.g. {extra[0]}); rerun with --mirror to replace them")
         return
-    d.mkdir(parents=True, exist_ok=True)
+    # stage the complete new set, then swap it in: a failed sync never leaves overlapping old + new block ranges
+    stage = RAW / f".{source}.sync"
+    shutil.rmtree(stage, ignore_errors=True)
+    stage.mkdir(parents=True)
     got = 0
     for name, size in sorted(remote.items()):
         if local.get(name) == size:
+            shutil.copy2(d / name, stage / name)
             continue
-        tmp = d / f".{name}.part"
         with c.stream("GET", f"{SERVER}/admin/raw/{source}/{name}") as resp:
             resp.raise_for_status()
-            with tmp.open("wb") as fh:
+            with (stage / name).open("wb") as fh:
                 for chunk in resp.iter_bytes(1 << 20):
                     fh.write(chunk)
-        tmp.rename(d / name)
         got += 1
-    for name in extra:
-        (d / name).unlink()
+    old = RAW / f".{source}.old"
+    shutil.rmtree(old, ignore_errors=True)
+    if d.exists():
+        d.rename(old)
+    stage.rename(d)
+    shutil.rmtree(old, ignore_errors=True)
     print(f"{source}: {got} downloaded, {len(remote) - got} up to date, {len(extra)} local-only removed")
 
 

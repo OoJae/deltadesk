@@ -217,6 +217,18 @@ def run() -> dict:
                                  "share_under_1bp": float((rec_fee["residual_bp"].abs() < 1).mean()) if rec_fee.height else None},
         "seconds": round(time.time() - t0, 1),
     }
+    # exact LP emissions for the pool summary: AERO actually distributed to staked liquidity (the schedule total in
+    # aero.study double-counts rollovers), minus what early withdrawals forfeited
+    summ_f = OUT / "pool_summary.json"
+    if summ_f.exists():
+        summ = json.loads(summ_f.read_text())
+        rec_usd = float(pos["aero_usd"].sum())
+        summ.update({"aero_distributed": rdiag["aero_paid_to_staked"], "aero_forfeited": float(pos["aero_forfeited"].sum()),
+                     "aero_received_usd": rec_usd, "positions": pos.height, "positions_ever_staked": int((pos["staked_share"] > 0).sum()),
+                     "lp_vs_hodl_usd": float(pos["vs_hodl_usd"].sum()),
+                     "edge_lp_income_hl_1h": (summ["fees_to_lps_usd"] + rec_usd) / summ["picked_hl_1h_usd"] if summ.get("picked_hl_1h_usd") else None,
+                     "edge_lp_income_basis": "fees kept by LPs + AERO received (earned − forfeited), valued at accrual"})
+        summ_f.write_text(json.dumps(summ, indent=1, default=str))
     pos.write_parquet(OUT / "positions.parquet")
     seg.drop("a_lo", "a_hi", "k_start", "k_end", strict=False).write_parquet(OUT / "segments.parquet")
     att.write_parquet(OUT / "attribution.parquet")

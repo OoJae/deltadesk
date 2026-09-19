@@ -6,6 +6,7 @@ import { POOLS, ratio, usd } from "@/lib/format";
 type AeroSummary = {
   swaps: number; vol_usd: number; fees_gross_usd: number; fees_to_voters_usd: number; fees_to_lps_usd: number; emissions_aero: number;
   emissions_usd: number; picked_hl_1h_usd: number; edge_gross_hl_1h: number | null; edge_lp_income_hl_1h: number | null; first_utc: string; last_utc: string;
+  aero_distributed?: number; aero_forfeited?: number; aero_received_usd?: number; lp_vs_hodl_usd?: number; positions?: number;
 };
 
 export const dynamic = "force-dynamic";
@@ -145,7 +146,9 @@ export default async function StudyPage() {
               { k: "Swap fees (all liquidity)", v: usd(aero.fees_gross_usd, 0), d: `${usd(aero.vol_usd, 0)} volume` },
               { k: "Picked off by informed flow", v: usd(aero.picked_hl_1h_usd, 0), d: "vs Hyperliquid, 1h" },
               { k: "Fees kept by LPs", v: usd(aero.fees_to_lps_usd, 0), d: "unstaked liquidity, after the 10% cut" },
-              { k: "AERO emissions", v: usd(aero.emissions_usd, 0), d: `${Math.round(aero.emissions_aero).toLocaleString()} AERO at accrual prices` },
+              aero.aero_received_usd != null
+                ? { k: "AERO received by LPs", v: usd(aero.aero_received_usd, 0), d: `${Math.round(aero.aero_distributed ?? 0).toLocaleString()} AERO paid, ${Math.round(aero.aero_forfeited ?? 0).toLocaleString()} forfeited by exits < 5 min` }
+                : { k: "AERO emissions", v: usd(aero.emissions_usd, 0), d: `${Math.round(aero.emissions_aero).toLocaleString()} AERO at accrual prices` },
             ].map((x) => (
               <div key={x.k} className="rounded-lg bg-surface-2 p-3">
                 <div className="text-xs text-muted">{x.k}</div>
@@ -156,7 +159,9 @@ export default async function StudyPage() {
           </div>
           <p className="text-sm text-ink-2 tabular">
             Edge (income ÷ value picked off): swap fees alone <strong className="text-ink">{ratio(aero.edge_gross_hl_1h)}</strong>; what LPs actually receive,
-            fees kept plus emissions, <strong className="text-ink">{ratio(aero.edge_lp_income_hl_1h)}</strong>. Pool-level, {aero.first_utc.slice(0, 10)} → {aero.last_utc.slice(0, 10)}.
+            fees kept plus AERO received, <strong className="text-ink">{ratio(aero.edge_lp_income_hl_1h)}</strong>.
+            {aero.lp_vs_hodl_usd != null && <> Across {aero.positions?.toLocaleString()} positions, LPs ended {usd(aero.lp_vs_hodl_usd, 0)} vs simply holding.</>}{" "}
+            {aero.first_utc.slice(0, 10)} → {aero.last_utc.slice(0, 10)}.
           </p>
         </section>
       )}
