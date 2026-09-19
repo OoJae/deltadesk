@@ -70,13 +70,17 @@ class ChainCfg:
     npm: str             # v3-style NonfungiblePositionManager
     lp_txs: str          # raw source holding the NPM logs + txs of every LP tx (JOIN_ALL on the pool's LP events)
     npm_transfers: str   # raw source holding the NPM Transfer logs
+    npm_pool_owners: tuple[str, ...] = ()  # pool-level owners whose Mint/Burn/Collect are NPM-managed (besides the NPM)
 
 
 CHAINS = {
     "robinhood": ChainCfg(NPM, "lp_txs", "npm_transfers"),
     # Aerodrome Slipstream NPM (equity pools). Transfers come from the LP txs themselves (mint → holder, gauge
     # deposit / withdraw): a Transfer-topic scan of the NPM on Base is too slow; wallet-to-wallet NFT moves are missed.
-    "base": ChainCfg("0xe1f8cd9ac4e4a65f54f38a5cdafca44f6dd68b53", "base_aero_lp_txs", "base_aero_lp_txs"),
+    # For a STAKED tokenId the NPM mints / burns / collects with the gauge as the pool-level owner (NPM source:
+    # addLiquidity recipient = gauge, burn/collect(..., gauge)), so gauge-owned pool events are NPM-managed too.
+    "base": ChainCfg("0xe1f8cd9ac4e4a65f54f38a5cdafca44f6dd68b53", "base_aero_lp_txs", "base_aero_lp_txs",
+                     npm_pool_owners=("0x30d1e5af5ce39863e6f69a1f73ffb0e1ac9771a8",)),
 }
 
 
@@ -271,6 +275,7 @@ def _lifecycle_ids(keys: list[tuple], dls: list[int], prefix: str) -> tuple[list
 def reconstruct_v3(pool: Pool) -> PoolPositions:
     cfg = CHAINS[pool.chain]
     npm = cfg.npm
+    npm_owned = {npm, *cfg.npm_pool_owners}
     plog = load_logs(pool.source, address=pool.pool_id, topic0=[T_V3_MINT, T_V3_BURN, T_V3_COLLECT])
     nlog = load_logs(cfg.lp_txs, address=npm, topic0=[T_NPM_INC, T_NPM_DEC, T_NPM_COLLECT])
     allev = pl.concat([plog, nlog], how="diagonal_relaxed").sort("ord")
@@ -298,14 +303,14 @@ def reconstruct_v3(pool: Pool) -> PoolPositions:
             w = words(r["data"])
             if t0 == T_V3_MINT:
                 rec = {**base, "etype": "inc", "lower": lo, "upper": hi, "dL": w[1], "amount0": w[2], "amount1": w[3], "pool_owner": owner}
-                if owner == npm:
+                if owner in npm_owned:
                     n_npm_mint += 1
                     pend_mint = rec
                 else:
                     direct_keys.append((owner, lo, hi)); direct_idx.append(len(ev_rows)); ev_rows.append(rec)
             elif t0 == T_V3_BURN:
                 rec = {**base, "etype": "dec", "lower": lo, "upper": hi, "dL": w[0], "amount0": w[1], "amount1": w[2], "pool_owner": owner}
-                if owner == npm:
+                if owner in npm_owned:
                     if w[0] > 0:
                         n_npm_burn += 1
                         pend_burn = rec
@@ -315,7 +320,7 @@ def reconstruct_v3(pool: Pool) -> PoolPositions:
                     direct_keys.append((owner, lo, hi)); direct_idx.append(len(ev_rows)); ev_rows.append(rec)
                 else:
                     col_rows.append({**base, "kind": "poke", "key": (owner, lo, hi), "amount0": 0, "amount1": 0})
-            elif t0 == T_V3_COLLECT and owner != npm:
+            elif t0 == T_V3_COLLECT and owner not in npm_owned:
                 col_rows.append({**base, "kind": "collect", "key": (owner, lo, hi), "amount0": w[1], "amount1": w[2]})
         else:  # NPM
             tid = topic_int(r["topic1"])
