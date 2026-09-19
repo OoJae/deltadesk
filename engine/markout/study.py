@@ -11,38 +11,22 @@ are joined (M1). Summing over swaps gives the LPs' aggregate edge: fees / picked
 
 from __future__ import annotations
 
-from datetime import date
 from pathlib import Path
 
 import polars as pl
 
+from markout.calendar import HOLIDAYS as CAL_HOLIDAYS
+from markout.calendar import regime_expr as cal_regime_expr
 from markout.pools import DATA, POOLS, decode_swaps, scan_raw
 
 OUT = DATA / "study" / "m0"
 HORIZONS = {"1m": 60, "5m": 300, "1h": 3600}
-HOLIDAYS = {date(2026, 7, 3), date(2026, 9, 7)}  # NYSE closed (Independence Day observed, Labor Day)
+HOLIDAYS = CAL_HOLIDAYS  # the shared market calendar (markout/calendar.py)
 
 
-def regime_expr() -> pl.Expr:
-    et = pl.from_epoch(pl.col("ts").cast(pl.Int64), time_unit="s").dt.replace_time_zone("UTC").dt.convert_time_zone("America/New_York")
-    dow = et.dt.weekday()  # 1=Mon … 7=Sun
-    mins = et.dt.hour().cast(pl.Int32) * 60 + et.dt.minute().cast(pl.Int32)
-    holiday = et.dt.date().is_in(list(HOLIDAYS))
-    weekend_dark = ((dow == 5) & (mins >= 20 * 60)) | (dow == 6) | ((dow == 7) & (mins < 20 * 60))
-    regular = (dow <= 5) & (mins >= 9 * 60 + 30) & (mins < 16 * 60)
-    extended = (dow <= 5) & (((mins >= 4 * 60) & (mins < 9 * 60 + 30)) | ((mins >= 16 * 60) & (mins < 20 * 60)))
-    reopen = ((dow == 7) & (mins >= 19 * 60 + 50)) | ((dow == 1) & (mins < 20)) | ((dow <= 5) & (mins >= 9 * 60 + 20) & (mins < 9 * 60 + 45))
-    return (
-        pl.when(holiday).then(pl.lit("HOLIDAY"))
-        .when(weekend_dark).then(pl.lit("WEEKEND_DARK"))
-        .when(regular).then(pl.lit("REGULAR"))
-        .when(extended).then(pl.lit("EXTENDED"))
-        .otherwise(pl.lit("OVERNIGHT"))
-        .alias("regime"),
-        reopen.alias("reopen_window"),
-        ((dow - 1) * 24 + et.dt.hour().cast(pl.Int32)).alias("how"),  # hour of week, Mon 00:00 ET = 0
-        et.dt.date().alias("date_et"),
-    )
+def regime_expr() -> list[pl.Expr]:
+    """regime, reopen_window, reopen_kind, how, date_et from the shared calendar (markout/calendar.py)."""
+    return cal_regime_expr("ts")
 
 
 def add_markouts(sw: pl.DataFrame) -> pl.DataFrame:

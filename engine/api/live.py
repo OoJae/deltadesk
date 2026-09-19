@@ -9,15 +9,14 @@ from __future__ import annotations
 
 import math
 import time
-from dataclasses import dataclass
-from datetime import date, datetime, timedelta
-from functools import lru_cache
+from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import httpx
 import polars as pl
 
+from markout.calendar import HOLIDAYS, Regime, regime_at  # noqa: F401  (re-exported for api.app and tests)
 from markout.pools import POOLS, Pool
 
 DATA = Path(__file__).resolve().parents[2] / "data"
@@ -25,9 +24,6 @@ ET = ZoneInfo("America/New_York")
 RPCS = ["https://rpc.mainnet.chain.robinhood.com", "https://robinhood-rpc.publicnode.com"]
 STATE_VIEW = "0xf3334192d15450cdd385c8b70e03f9a6bd9e673b"
 HL_INFO = "https://api.hyperliquid.xyz/info"
-
-# NYSE full-day closures (2026). Early closes are ignored (conservative: treated as a normal day).
-HOLIDAYS = {date(2026, 7, 3), date(2026, 9, 7), date(2026, 11, 26), date(2026, 12, 25)}
 
 # Pool → HL reference: either one coin, or (numerator, denominator) for a ratio pool.
 HL_REF = {"NVDA/USDG": "xyz:NVDA", "TSLA/USDG": "xyz:TSLA", "SPY/USDG": "xyz:SP500", "QQQ/SPY": ("xyz:XYZ100", "xyz:SP500")}
@@ -64,31 +60,7 @@ def resolve_pool(name: str) -> Pool:
 
 
 # ---------------------------------------------------------------- market calendar
-@dataclass(frozen=True)
-class Regime:
-    name: str          # REGULAR | EXTENDED | OVERNIGHT | WEEKEND_DARK | HOLIDAY
-    reopen_window: bool
-    how: int           # hour of week, Mon 00:00 ET = 0
-    et: datetime
-
-
-def regime_at(ts: float) -> Regime:
-    """Same calendar as markout.study.regime_expr, for a single timestamp."""
-    et = datetime.fromtimestamp(ts, ET)
-    dow = et.isoweekday()  # 1=Mon … 7=Sun
-    mins = et.hour * 60 + et.minute
-    reopen = (dow == 7 and mins >= 19 * 60 + 50) or (dow == 1 and mins < 20) or (dow <= 5 and 9 * 60 + 20 <= mins < 9 * 60 + 45)
-    if et.date() in HOLIDAYS:
-        name = "HOLIDAY"
-    elif (dow == 5 and mins >= 20 * 60) or dow == 6 or (dow == 7 and mins < 20 * 60):
-        name = "WEEKEND_DARK"
-    elif dow <= 5 and 9 * 60 + 30 <= mins < 16 * 60:
-        name = "REGULAR"
-    elif dow <= 5 and (4 * 60 <= mins < 9 * 60 + 30 or 16 * 60 <= mins < 20 * 60):
-        name = "EXTENDED"
-    else:
-        name = "OVERNIGHT"
-    return Regime(name, reopen, (dow - 1) * 24 + et.hour, et)
+# One calendar for the study, the API and the agent: markout/calendar.py (Regime, regime_at, HOLIDAYS).
 
 
 # ---------------------------------------------------------------- chain reads
@@ -155,8 +127,11 @@ def hl_ref_price(pool: Pool, mids: dict[str, float] | None = None) -> float:
 
 
 # ---------------------------------------------------------------- basis calibration
-@lru_cache(maxsize=1)
 def _candles(coin: str) -> pl.DataFrame:
+    return cached(f"candles:{coin}", BASIS_TTL_S, lambda: _load_candles(coin))
+
+
+def _load_candles(coin: str) -> pl.DataFrame:
     frames = []
     for iv in ("1m", "5m", "15m", "1h"):
         f = DATA / "raw" / "hl_candles" / f"{coin.replace(':', '_')}_{iv}.parquet"
@@ -177,15 +152,24 @@ def _hl_series(pool: Pool) -> pl.DataFrame:
     return _candles(ref).select("ts", pl.col("c").alias("hl"))
 
 
-@lru_cache(maxsize=None)
+BASIS_TTL_S = 600
+
+
 def basis(pool_key: str) -> dict:
-    """k = median(pool mid / HL) over the most recent completed regular session in the M0 swap table.
-    Prefers the verified hl_ref module output when present."""
+    """k = median(pool mid / HL) over the most recent completed regular session. Cached for BASIS_TTL_S and keyed on
+    the study file's mtime, so k refreshes after every pipeline pass (it used to be cached for the process lifetime)."""
     hl_out = DATA / "study" / "m1" / "hl_ref" / "hl_markouts.parquet"
+    mtime = hl_out.stat().st_mtime if hl_out.exists() else 0.0
+    return cached(f"basis:{pool_key}:{mtime}", BASIS_TTL_S, lambda: _basis(pool_key, hl_out))
+
+
+def _basis(pool_key: str, hl_out: Path) -> dict:
     if hl_out.exists():
-        df = pl.read_parquet(hl_out, columns=["pool", "k", "block"]).filter(pl.col("pool") == pool_key).sort("block")
+        df = (pl.read_parquet(hl_out, columns=["pool", "k", "k_session", "block", "ts"]).filter(pl.col("pool") == pool_key)
+              .drop_nulls("k").sort("block"))
         if df.height:
-            return {"k": float(df["k"][-1]), "source": "hl_ref"}
+            return {"k": float(df["k"][-1]), "source": "hl_ref", "session": str(df["k_session"][-1]),
+                    "as_of_swap_ts": float(df["ts"][-1]), "computed_at": time.time()}
     pool = POOL_BY_KEY[pool_key]
     sw = pl.read_parquet(DATA / "study" / "m0" / "swaps.parquet", columns=["pool", "ts", "mid_after", "regime", "date_et"])
     reg = sw.filter((pl.col("pool") == pool_key) & (pl.col("regime") == "REGULAR"))
@@ -193,7 +177,7 @@ def basis(pool_key: str) -> dict:
     day = reg.filter(pl.col("date_et") == last_day).sort("ts")
     j = day.join_asof(_hl_series(pool), on="ts", strategy="backward").drop_nulls("hl")
     k = float((j["mid_after"] / j["hl"]).median())
-    return {"k": k, "source": f"m0 swaps, regular session {last_day}", "n": j.height}
+    return {"k": k, "source": f"m0 swaps, regular session {last_day}", "session": str(last_day), "n": j.height, "computed_at": time.time()}
 
 
 def fair_value(pool: Pool) -> dict:

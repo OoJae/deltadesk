@@ -3,7 +3,7 @@
 from datetime import datetime
 
 from api import live
-from api.app import PHI_BLOCK, assess
+from api.app import GAP_CAUTION, assess
 
 
 def ts(y, mo, d, h, mi=0):
@@ -18,12 +18,23 @@ def test_calendar_regimes():
     assert live.regime_at(ts(2026, 9, 20, 19, 59)).name == "WEEKEND_DARK"    # Sun 19:59
     assert live.regime_at(ts(2026, 9, 20, 20, 1)).name == "OVERNIGHT"        # Sun 20:01
     assert live.regime_at(ts(2026, 9, 7, 11)).name == "HOLIDAY"              # Labor Day
+    # 24/5 sessions roll at 20:00 ET: no session opens the evening before a holiday, the next opens the holiday evening
+    assert live.regime_at(ts(2026, 9, 6, 20, 30)).name == "HOLIDAY"          # Sun before Labor Day (was OVERNIGHT)
+    assert live.regime_at(ts(2026, 9, 7, 20, 30)).name == "OVERNIGHT"        # Labor Day evening = Tue session
+    assert live.regime_at(ts(2026, 7, 2, 21)).name == "HOLIDAY"              # Thu evening before Jul 3
+    assert live.regime_at(ts(2026, 11, 27, 14)).name == "EXTENDED"           # early close 13:00
 
 
 def test_reopen_windows_and_hour_of_week():
-    assert live.regime_at(ts(2026, 9, 20, 19, 55)).reopen_window            # Sunday wake
-    assert live.regime_at(ts(2026, 9, 21, 9, 25)).reopen_window             # Monday open
+    assert live.regime_at(ts(2026, 9, 20, 19, 55)).reopen_kind == "wake"     # Sunday wake 19:50-20:15
+    assert live.regime_at(ts(2026, 9, 20, 20, 10)).reopen_kind == "wake"
+    assert not live.regime_at(ts(2026, 9, 20, 23)).reopen_window            # validated R3 window, not Sun->Mon 00:20
+    assert not live.regime_at(ts(2026, 9, 21, 0, 10)).reopen_window
+    assert live.regime_at(ts(2026, 9, 21, 9, 25)).reopen_kind == "weekday_open"
     assert not live.regime_at(ts(2026, 9, 21, 9, 50)).reopen_window
+    assert live.regime_at(ts(2026, 9, 6, 19, 55)).reopen_kind is None       # no wake: Labor Day is closed
+    assert live.regime_at(ts(2026, 9, 7, 19, 55)).reopen_kind == "wake"     # wake on the holiday evening
+    assert live.regime_at(ts(2026, 9, 7, 9, 25)).reopen_kind is None        # no cash open on a holiday
     assert live.regime_at(ts(2026, 9, 21, 9, 25)).how == 9                  # Mon 09:xx
     assert live.regime_at(ts(2026, 9, 20, 23)).how == 6 * 24 + 23           # Sun 23:xx
 
@@ -32,8 +43,12 @@ def test_assess_verdicts():
     regular = live.regime_at(ts(2026, 9, 16, 11))
     good_hour = {"edge_1h": 3.0, "picked_1h_usd": 10.0}
     assert assess(1.0, regular, good_hour, 60)["verdict"] == "ALLOW"
-    assert assess(PHI_BLOCK["REGULAR"] / 2 + 1, regular, good_hour, 60)["verdict"] == "CAUTION"
-    assert assess(-(PHI_BLOCK["REGULAR"] + 1), regular, good_hour, 60)["verdict"] == "BLOCK"
+    # the gap threshold is unvalidated (M1): a big gap is CAUTION, never BLOCK
+    assert assess(GAP_CAUTION["REGULAR"] + 1, regular, good_hour, 60)["verdict"] == "CAUTION"
+    assert assess(-(GAP_CAUTION["REGULAR"] * 5), regular, good_hour, 60)["verdict"] == "CAUTION"
+    # Chainlink updates on 50 bp moves / ~24 h heartbeat: hours-old is normal, only >26 h in an open session is dead
+    assert assess(1.0, regular, good_hour, 7 * 3600)["verdict"] == "ALLOW"
+    assert assess(1.0, regular, good_hour, 27 * 3600)["verdict"] == "CAUTION"
     assert assess(1.0, regular, {"edge_1h": 0.3, "picked_1h_usd": 50.0}, 60)["verdict"] == "BLOCK"   # historically toxic hour
     assert assess(1.0, regular, {"edge_1h": 0.8, "picked_1h_usd": 50.0}, 60)["verdict"] == "CAUTION"
     # takers lost money this hour (picked < 0): good for LPs, never a reason to block
@@ -41,7 +56,40 @@ def test_assess_verdicts():
     weekend = live.regime_at(ts(2026, 9, 19, 12))
     assert assess(1.0, weekend, good_hour, 90_000)["verdict"] == "CAUTION"    # closed market, frozen oracle
     reopen = live.regime_at(ts(2026, 9, 21, 9, 25))
-    assert assess(0.0, reopen, good_hour, 60)["verdict"] == "BLOCK"
+    assert assess(0.0, reopen, good_hour, 60)["verdict"] == "BLOCK"          # validated weekday-open guard
+    wake = live.regime_at(ts(2026, 9, 20, 20, 5))
+    assert assess(0.0, wake, good_hour, 60)["verdict"] == "CAUTION"          # safety check only
+
+
+def test_calendar_scalar_matches_vectorised():
+    import random
+
+    import polars as pl
+
+    from markout.calendar import regime_at, regime_expr
+
+    random.seed(11)
+    xs = [random.uniform(1.7815e9, 1.8e9) for _ in range(3000)]
+    base = ts(2026, 9, 6, 0)
+    xs += [base + m * 60 for m in range(0, 3 * 1440, 5)]   # Labor Day weekend, every 5 min
+    df = pl.DataFrame({"ts": xs}).with_columns(*regime_expr())
+    for t, r, rw, rk, how in df.select("ts", "regime", "reopen_window", "reopen_kind", "how").iter_rows():
+        x = regime_at(t)
+        assert (x.name, x.reopen_window, x.reopen_kind, x.how) == (r, rw, rk, how), t
+    assert df["how"].min() >= 0 and df["how"].max() <= 167    # Sundays used to overflow Int8 to negative hours
+
+
+def test_premium_fails_closed_on_railway(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from api import app as appmod
+
+    monkeypatch.setattr(appmod, "API_KEY", "")
+    monkeypatch.setattr(appmod, "REQUIRE_KEY", True)
+    c = TestClient(appmod.app)
+    assert c.get("/lp-league").status_code == 503          # misconfigured server: closed, not open
+    monkeypatch.setattr(appmod, "REQUIRE_KEY", False)
+    assert c.get("/lp-league").status_code != 503          # local dev without a key stays open
 
 
 def test_mid_from_sqrt_orientation():

@@ -1,0 +1,37 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib", "node_modules"]
+solc_version = "0.8.26"
+evm_version = "cancun"          # ArbOS 61 on Robinhood Chain (4663) supports Cancun opcodes (tstore)
+optimizer = true
+optimizer_runs = 2000
+via_ir = false
+no_match_path = "test/fork/**"
+fs_permissions = [{ access = "read", path = "./node_modules/@uniswap" }, { access = "read-write", path = "./deployments" }, { access = "read-write", path = "./reports" }]
+
+[fuzz]
+runs = 1000
+seed = "0x4663"
+
+[invariant]
+runs = 1000
+depth = 100
+fail_on_revert = false
+
+[profile.quick.invariant]      # fast local iteration: FOUNDRY_PROFILE=quick
+runs = 64
+depth = 50
+
+[rpc_endpoints]
+robinhood = "${RH_RPC_URL}"
+robinhood_archive = "${RH_ARCHIVE_RPC}"
+
+[profile.fork]
+match_path = "test/fork/**"
+no_match_path = "__none__"
+
+[profile.fork.invariant]
+runs = 50
+depth = 20
+fail_on_revert = false

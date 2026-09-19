@@ -5,3 +5,8 @@ node_modules/
 .venv/
 __pycache__/
 !.env.example
+contracts/lib/
+contracts/node_modules/
+contracts/out/
+contracts/cache/
+contracts/broadcast/*/31337/

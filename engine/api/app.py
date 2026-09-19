@@ -8,6 +8,7 @@ Endpoints (JSON):
   GET /fair-value/{pool}        HL-derived fair value vs pool mid, gap in bp, Chainlink freshness
   GET /safe-to-lp/{pool}        ALLOW / CAUTION / BLOCK with reasons (gap vs fair value, regime, historical toxicity)
   GET /pool-toxicity/{pool}     historical LP edge by regime / hour-of-week, current hour's record
+  GET /basis/{pool}             fair-value basis k and its calibration session (premium)
   GET /study                    headline tables of the Truth Study
   GET /tearsheet/{chain}/{addr} LP P&L decomposition for a wallet (needs positions module output)
   GET /lp-league                LP wallets ranked by net edge (needs positions module output)
@@ -31,22 +32,28 @@ from api import live
 
 app = FastAPI(title="DeltaDesk", version="0.1.0", description="The open market-making desk for tokenized stocks: LP truth layer API.")
 
-# Premium routes are sold over x402 (Bankr x402 Cloud proxies here with this key). If DELTADESK_API_KEY is unset
-# (local dev) every route is open.
+# Premium routes are sold over x402 (Bankr x402 Cloud proxies here with this key). Local dev without a key is open;
+# on Railway (or with DELTADESK_REQUIRE_KEY=1) a missing key fails CLOSED instead of opening every premium route.
 API_KEY = os.environ.get("DELTADESK_API_KEY", "")
+REQUIRE_KEY = bool(os.environ.get("RAILWAY_ENVIRONMENT")) or os.environ.get("DELTADESK_REQUIRE_KEY") == "1"
 
 
 def premium(x_deltadesk_key: str = Header(default="")):
-    if API_KEY and not hmac.compare_digest(x_deltadesk_key, API_KEY):
+    if not API_KEY:
+        if REQUIRE_KEY:
+            raise HTTPException(503, "premium routes disabled: the server key is not configured")
+        return
+    if not hmac.compare_digest(x_deltadesk_key, API_KEY):
         raise HTTPException(402, "premium endpoint: pay per call via x402 (see /health for the marketplace URL)")
 
 
 DISCLAIMER = "Informational analytics, not investment advice. Self-markout and HL-referenced estimates; see /study for method."
 STUDY = live.DATA / "study"
 
-# Provisional gates (bp of |ln(F/P)|) until the backtest module publishes tuned values (data/study/m1/backtest/).
-PHI_BLOCK = {"REGULAR": 15.0, "EXTENDED": 25.0, "OVERNIGHT": 25.0, "WEEKEND_DARK": 60.0, "HOLIDAY": 60.0}
-PHI_CAUTION = {k: v / 2 for k, v in PHI_BLOCK.items()}
+# Gap between the pool and HL-derived fair value (bp of |ln(F/P)|). UNVALIDATED: the M1 backtest's gap rule failed out
+# of sample, so a large gap is reported as CAUTION only, never BLOCK, until phi is recalibrated on the 1 s tape.
+GAP_CAUTION = {"REGULAR": 15.0, "EXTENDED": 25.0, "OVERNIGHT": 25.0, "WEEKEND_DARK": 60.0, "HOLIDAY": 60.0}
+FEED_DEAD_S = 26 * 3600  # Chainlink stock feeds update on 50 bp moves or a ~24 h heartbeat: only >26 h means dead
 
 
 def _pool(name: str) -> live.Pool:
@@ -107,13 +114,14 @@ def assess(gap_bps: float, regime: live.Regime, hour: dict | None, chainlink_age
             verdict = v
         reasons.append({"level": v, "reason": why})
 
-    g = abs(gap_bps)
-    if g > PHI_BLOCK[regime.name]:
-        worsen("BLOCK", f"pool is {gap_bps:+.1f} bp from fair value (limit {PHI_BLOCK[regime.name]:.0f} bp in {regime.name}); liquidity here gets picked off")
-    elif g > PHI_CAUTION[regime.name]:
-        worsen("CAUTION", f"pool is {gap_bps:+.1f} bp from fair value (caution above {PHI_CAUTION[regime.name]:.0f} bp)")
-    if regime.reopen_window:
-        worsen("BLOCK", "reopen window (Sun 19:50–Mon 00:20 or weekday 09:20–09:45 ET): LP edge historically < 1")
+    if abs(gap_bps) > GAP_CAUTION[regime.name]:
+        worsen("CAUTION", f"pool is {gap_bps:+.1f} bp from fair value (above {GAP_CAUTION[regime.name]:.0f} bp in {regime.name}); "
+                          "this threshold is unvalidated (the gap rule failed out of sample)")
+    kind = getattr(regime, "reopen_kind", None)
+    if kind == "weekday_open":
+        worsen("BLOCK", "first minutes after the cash open (09:20–09:45 ET): the one gate validated out of sample, LP edge < 1")
+    elif kind == "wake":
+        worsen("CAUTION", "session reopening after a closure (19:50–20:15 ET): the wake print is unconfirmed (safety check, not an edge claim)")
     if regime.name in ("WEEKEND_DARK", "HOLIDAY"):
         worsen("CAUTION", "US market closed: fair value is Hyperliquid's internal price, Chainlink is frozen")
     # Toxic hour = informed flow took back more than the fees. edge is only defined when takers gained (picked > 0);
@@ -124,8 +132,8 @@ def assess(gap_bps: float, regime: live.Regime, hour: dict | None, chainlink_age
             worsen("BLOCK", f"this hour of the week informed flow historically took {1 / e:.1f}x what LPs earned in fees (edge {e:.2f})")
         elif e < 1.0:
             worsen("CAUTION", f"this hour of the week LPs historically lost money (edge {e:.2f})")
-    if chainlink_age_s is not None and regime.name == "REGULAR" and chainlink_age_s > 3600:
-        worsen("CAUTION", f"Chainlink feed is {chainlink_age_s / 3600:.1f} h old during regular hours")
+    if chainlink_age_s is not None and regime.name not in ("WEEKEND_DARK", "HOLIDAY") and chainlink_age_s > FEED_DEAD_S:
+        worsen("CAUTION", f"Chainlink feed looks dead: no update for {chainlink_age_s / 3600:.1f} h in an open session")
     if not reasons:
         reasons.append({"level": "ALLOW", "reason": "pool is near fair value and this hour has a positive LP record"})
     return {"verdict": verdict, "reasons": reasons}
@@ -217,7 +225,7 @@ def safe_to_lp(pool: str):
         "reopen_window": reg.reopen_window,
         "hour_of_week_record": hour,
         "next_regime_change": live.next_regime_change(now),
-        "thresholds": {"block_bps": PHI_BLOCK[reg.name], "caution_bps": PHI_CAUTION[reg.name], "source": "provisional"},
+        "thresholds": {"gap_caution_bps": GAP_CAUTION[reg.name], "source": "unvalidated: the gap rule failed out of sample (M1)"},
         "as_of": now,
         "disclaimer": DISCLAIMER,
     }
@@ -227,17 +235,46 @@ def safe_to_lp(pool: str):
 def pool_toxicity(pool: str):
     p = _pool(pool)
     reg = live.regime_at(time.time())
-    cols = ["regime", "swaps", "vol_usd", "fee_usd", "picked_1h", "edge_1h", "lp_net_bps_1h"]
-    by_regime = table("by_regime").filter(pl.col("pool") == p.key).select(cols)
-    by_how = table("by_how").filter(pl.col("pool") == p.key).select("how", "fee_usd", "picked_1h", "edge_1h").sort("picked_1h", descending=True)
+    by_regime, by_how, method = _toxicity_tables(p.key)
     return {
         "pool": p.key,
-        "method": "self-markout vs pool mid 1h later (M0); HL-referenced version pending",
+        "method": method,
         "by_regime": rows(by_regime),
         "worst_hours_of_week": rows(by_how.head(8)),
         "current_hour": {"how": reg.how, **(hour_record(p.key, reg.how) or {})},
         "disclaimer": DISCLAIMER,
     }
+
+
+def _hl_table(name: str, pool_key: str) -> pl.DataFrame | None:
+    f = STUDY / "m1" / "hl_ref" / f"{name}.parquet"
+    if not f.exists():
+        return None
+    df = _scope_table(str(f), f.stat().st_mtime).filter(pl.col("pool") == pool_key)
+    return df if df.height else None
+
+
+def _toxicity_tables(pool_key: str) -> tuple[pl.DataFrame, pl.DataFrame, str]:
+    """HL-referenced (1h markout vs Hyperliquid) tables when available, else M0 self-markout. Same output columns."""
+    hr, hh = _hl_table("by_regime", pool_key), _hl_table("by_how", pool_key)
+    if hr is not None and hh is not None:
+        edge = pl.when(pl.col("picked_hl_1h") > 0).then(pl.col("fee_1h") / pl.col("picked_hl_1h")).otherwise(None)
+        by_regime = hr.select("regime", "swaps", "vol_usd", "fee_usd", pl.col("picked_hl_1h").alias("picked_1h"), edge.alias("edge_1h"),
+                              pl.col("lp_net_hl_bps_1h").alias("lp_net_bps_1h"))
+        by_how = (hh.select("how", pl.col("fee_1h").alias("fee_usd"), pl.col("picked_hl_1h").alias("picked_1h"), edge.alias("edge_1h"))
+                  .sort("picked_1h", descending=True))
+        return by_regime, by_how, "markout vs Hyperliquid 24/7 price 1h later (M1)"
+    cols = ["regime", "swaps", "vol_usd", "fee_usd", "picked_1h", "edge_1h", "lp_net_bps_1h"]
+    by_regime = table("by_regime").filter(pl.col("pool") == pool_key).select(cols)
+    by_how = table("by_how").filter(pl.col("pool") == pool_key).select("how", "fee_usd", "picked_1h", "edge_1h").sort("picked_1h", descending=True)
+    return by_regime, by_how, "self-markout vs pool mid 1h later (M0)"
+
+
+@app.get("/basis/{pool}", dependencies=[Depends(premium)])
+def basis(pool: str):
+    """The fair-value basis k (pool mid / HL) and when it was calibrated: the desk agent's slow-moving parameter."""
+    p = _pool(pool)
+    return {"pool": p.key, **live.basis(p.key), "hl_ref": live.HL_REF[p.key], "as_of": time.time()}
 
 
 @app.get("/study")
