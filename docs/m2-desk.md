@@ -129,6 +129,11 @@ and the delegated Operator signed it through Dynamic and broadcast it:
 | Preimage (agent DB `gate_signals`) | `{"at":1789832630302,"from":null,"lane":"0x7f8968734e613f509991d3392074cf7f1e4bd662","source":"initial","to":{"gates":["CLOSED","STALE-REF"],"regime":"WEEKEND_DARK"}}` |
 | Check | `cast keccak '<preimage>'` = the on-chain `reasonHash` |
 
+A second transition followed at 15:51 UTC when the engine's new `/basis` endpoint went live and the fair value returned
+(STALE-REF cleared; F 222.287 vs pool 222.491, gap −9.2 bp): gates `CLOSED+STALE-REF → CLOSED`, approved and signed the same
+way, tx [`0xbe80e98b…3223`](https://robinhoodchain.blockscout.com/tx/0xbe80e98beb80f8f87275b01568fd451fe4ceea35881fe74c106e2826ed083223)
+(decision `01M2X5TAYMSFFC7KN2F3JDX82G`).
+
 The agent reconciled the LaneAction as its own (decision `executed`, execution `confirmed`); the watchdog's cross-check route
 knows the decisionId. Every later regime or gate change on this lane is announced the same way (≤ 6 per hour, 60 s dwell).
 
