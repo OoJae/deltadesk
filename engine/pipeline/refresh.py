@@ -36,11 +36,12 @@ STEPS = [
     ("hl_ref", ["markout.hl_ref"], 0),
     ("positions", ["positions.attribute"], 3600),
     ("league", ["league.build"], 3600),
-    # Base first, then the long Robinhood swap-sender backfill.
-    ("hyper_sync_heavy", ["indexer.hs_backfill", "base_aero_nvda", "base_aero_gauge", "base_aero_usdc", "base_aero_lp_txs",
-                          "swap_txs"], 1800),
+    # Base (minutes), then its analytics, then the long Robinhood swap-sender backfill (hours on a fresh volume), so the
+    # Aerodrome tearsheets don't wait on it.
+    ("hyper_sync_base", ["indexer.hs_backfill", "base_aero_nvda", "base_aero_gauge", "base_aero_usdc", "base_aero_lp_txs"], 1800),
     ("aero_study", ["aero.study"], 3600),          # Base: NVDAc/USDC pool study, emissions, voter fee split
     ("aero_positions", ["aero.positions"], 3600),  # Base: staked / unstaked tearsheets
+    ("hyper_sync_swaps", ["indexer.hs_backfill", "swap_txs"], 1800),
     ("flow", ["flow.xray"], 3600),
     ("backtest", ["backtest.gap_exclusion"], 6 * 3600),
 ]
