@@ -83,14 +83,19 @@ def load(root=OUT) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
             pl.read_parquet(root / "attribution.parquet"))
 
 
-def tearsheet(owner: str, data: tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame] | None = None) -> dict:
+def tearsheet(owner: str, data: tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame] | None = None, role: str = "auto") -> dict:
+    """role: "owner" (positions whose NFT/pool position the address holds at the end), "operator" (positions the address
+    manages, i.e. sends the LP transactions for; this is how the LP League groups wallets), or "auto" (owner if the address
+    owns any position, else operator). One role per tearsheet, so the same position is never counted twice."""
     addr = owner.strip().lower()
     pos, seg, att = data if data is not None else load()
-    held = seg.filter(pl.col("seg_owner") == addr)["pos_id"].unique().to_list()
-    sel = pos.filter((pl.col("owner") == addr) | (pl.col("operator") == addr) | pl.col("pos_id").is_in(held))
-    out: dict = {"owner": addr, "generated_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                 "match": {"as_owner": int((sel["owner"] == addr).sum()), "as_operator": int((sel["operator"] == addr).sum()),
-                           "as_segment_holder": int(sel["pos_id"].is_in(held).sum())}}
+    by_owner = pos.filter(pl.col("owner") == addr)
+    by_operator = pos.filter(pl.col("operator") == addr)
+    if role == "auto":
+        role = "owner" if by_owner.height else "operator"
+    sel = by_owner if role == "owner" else by_operator
+    out: dict = {"owner": addr, "role": role, "generated_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                 "match": {"as_owner": by_owner.height, "as_operator": by_operator.height}}
     if sel.is_empty():
         out.update({"summary": None, "by_regime": [], "by_pool": [], "positions": []})
         return out
@@ -106,7 +111,8 @@ def tearsheet(owner: str, data: tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame] 
     tot = {c: float(sel[c].fill_null(0.0).sum()) for c in ("deposits_usd", "withdrawals_usd", "end_value_usd", "fee_usd", "fee_usd_v1h",
                                                          "fee_usd_hlv1h", "picked_1h", "picked_hl_1h", "picked_5m", "il_usd", "price_pnl_usd",
                                                          "gas_usd", "net_usd", "vs_hodl_usd", "vol_usd")}
-    rec = sel.filter(pl.col("residual_usd").is_not_null() & pl.col("closed"))
+    # Only fully collected closed positions can be reconciled (NPM.burn requires tokensOwed == 0; or collected after close).
+    rec = sel.filter(pl.col("residual_usd").is_not_null() & pl.col("closed") & (pl.col("nft_burned").fill_null(False) | pl.col("collected_after_close").fill_null(False)))
     per_k = 1000.0 / notional if notional > 0 else float("nan")
     per_day = per_k / active_days if active_days > 0 else float("nan")
     summary = {
@@ -197,7 +203,7 @@ def render(ts: dict, limit: int = 25) -> str:
         return f"no positions for {ts['owner']}"
     fl = s["flags"]
     L = [f"LP tearsheet · {ts['owner']}   ({s['n_positions']} positions, {s['n_open']} open; pools {', '.join(s['pools'])})",
-         f"  matched as owner {ts['match']['as_owner']}, operator {ts['match']['as_operator']}, segment holder {ts['match']['as_segment_holder']}",
+         f"  role {ts['role']} · matched as owner {ts['match']['as_owner']}, as operator {ts['match']['as_operator']}",
          f"  active {s['active_days']:.1f} days ({s['first_utc']} → {s['last_utc']}), avg notional ${_f(s['avg_notional_usd'])}", "",
          f"  {'':<16}{'USD':>12}{'per $1k':>10}{'per $1k/day':>13}",
          ]
@@ -234,8 +240,9 @@ def main():
     ap.add_argument("owner")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--limit", type=int, default=25)
+    ap.add_argument("--as", dest="role", choices=["auto", "owner", "operator"], default="auto")
     a = ap.parse_args()
-    ts = tearsheet(a.owner)
+    ts = tearsheet(a.owner, role=a.role)
     print(json.dumps(ts, indent=1) if a.json else render(ts, a.limit))
 
 

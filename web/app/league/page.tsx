@@ -51,7 +51,7 @@ export default async function LeaguePage() {
                   <tr key={String(r.manager)} className="border-t border-grid">
                     <td className="p-2 text-muted">{String(r.rank)}</td>
                     <td className="p-2">
-                      <a className="font-mono text-[var(--accent)] hover:underline" href={`/tearsheet?wallet=${r.manager}`}>{String(r.manager).slice(0, 10)}…</a>
+                      <a className="font-mono text-[var(--accent)] hover:underline" href={`/tearsheet?wallet=${r.manager}&as=operator`}>{String(r.manager).slice(0, 10)}…</a>
                     </td>
                     <td className="p-2 text-ink-2">{String(r.pools).replaceAll("/USDG", "")}</td>
                     <td className="p-2 text-right font-semibold">{perK(r.vs_hodl_per_1k_day)}</td>

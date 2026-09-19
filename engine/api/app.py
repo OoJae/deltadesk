@@ -231,14 +231,16 @@ def study_tables():
 
 
 @app.get("/tearsheet/{chain}/{wallet}", dependencies=[Depends(premium)])
-def tearsheet(chain: str, wallet: str):
+def tearsheet(chain: str, wallet: str, role: str = "auto"):
     if chain not in ("robinhood", "4663"):
         raise HTTPException(501, "only Robinhood Chain (4663) for now; Base/Aerodrome coming in M1.3")
     try:
         from positions.tearsheet import tearsheet as build  # built by the positions module
     except ImportError as e:
         raise HTTPException(503, "positions module not built yet") from e
-    return {**build(wallet.lower()), "disclaimer": DISCLAIMER}
+    if role not in ("auto", "owner", "operator"):
+        raise HTTPException(400, "role must be auto, owner or operator")
+    return {**build(wallet.lower(), role=role), "disclaimer": DISCLAIMER}
 
 
 @app.get("/lp-league", dependencies=[Depends(premium)])
