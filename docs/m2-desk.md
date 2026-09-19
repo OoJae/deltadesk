@@ -20,31 +20,31 @@ addresses to `…/address/<address>`.
 
 | Field | Value |
 |---|---|
-| Date / time (UTC, ET) | TBD |
-| Foundry version | TBD |
-| Deployer | TBD |
-| Admin / pendingAdmin (`DESK_ADMIN`) | TBD / TBD |
-| `acceptAdmin` tx (if an admin was proposed) | TBD |
-| Record `contracts/deployments/4663.json` (commit) | TBD |
-| Total deploy gas / cost (ETH, USD) | TBD |
+| Date / time (UTC, ET) | 2026-09-19 14:43 UTC (10:43 ET), deployedAt 1789829035 |
+| Foundry version | `forge Version: 1.8.3-Homebrew` |
+| Deployer | [`0x6C9f…b6E0`](https://robinhoodchain.blockscout.com/address/0x6C9f2ca64d9491ec76863924e400Aa6f5A74b6E0) (encrypted Foundry keystore) |
+| Admin / pendingAdmin (`DESK_ADMIN`) | the deployer (keystore EOA; Safe in M4) / none |
+| `acceptAdmin` tx (if an admin was proposed) | n/a (no admin proposed) |
+| Record `contracts/deployments/4663.json` (commit) | `c7ff6ad` |
+| Total deploy gas / cost (ETH, USD) | 8,736,640 gas / 0.000543 ETH (≈ $1.43 at $2,640) |
 
 **Contracts**
 
 | Contract | Address | Deploy tx | Blockscout verification |
 |---|---|---|---|
-| `ChainlinkFence` | TBD | TBD | TBD |
-| `DeskLaneFactory` | TBD | TBD | TBD |
-| `DeskLaneV3` implementation (kind 1) | TBD | TBD | TBD |
+| `ChainlinkFence` | [`0xc82Cc6A466b7fE32e822A7dA59E7D9d7b726C1ea`](https://robinhoodchain.blockscout.com/address/0xc82Cc6A466b7fE32e822A7dA59E7D9d7b726C1ea) | [`0x4c19158c…`](https://robinhoodchain.blockscout.com/tx/0x4c19158c380cc68c68924f5a00ab6adf83225368d0ffb304dbbe2de2bee795d8) | Sourcify full match (creation + runtime) |
+| `DeskLaneFactory` | [`0x6968B97974aF2ba51537e751c043d5ba48d663B3`](https://robinhoodchain.blockscout.com/address/0x6968B97974aF2ba51537e751c043d5ba48d663B3) | [`0x1886c453…`](https://robinhoodchain.blockscout.com/tx/0x1886c4536a9ccbfcd42200f35b3c0ba850eb7a3a7892446fb1bca358f8f9ef19) | Sourcify full match (creation + runtime) |
+| `DeskLaneV3` implementation (kind 1) | [`0xBf5f4880B2f569656E913d225bcF4810Dcc4EDD9`](https://robinhoodchain.blockscout.com/address/0xBf5f4880B2f569656E913d225bcF4810Dcc4EDD9) | [`0x11cdc4b5…`](https://robinhoodchain.blockscout.com/tx/0x11cdc4b59b513514e89989782d754bbc27740802ea8a7a0905f5fd1ffe3379c6) | Sourcify full match (creation + runtime) |
 
 | Admin call | Tx |
 |---|---|
-| `setImplementation(1, impl)` (first registration: instant) | TBD |
-| `setPoolAllowed(NVDA/USDG 0xd4EB…14a3, 1, true)` | TBD |
+| `setImplementation(1, impl)` (first registration: instant) | [`0x9af83fe9…`](https://robinhoodchain.blockscout.com/tx/0x9af83fe9fe0243431296cf70944eea670e9d6ad33e0ed69f3074a186c531549e) |
+| `setPoolAllowed(NVDA/USDG 0xd4EB…14a3, 1, true)` | [`0x141db5c9…`](https://robinhoodchain.blockscout.com/tx/0x141db5c9d38862132cc2d1b1c5f7958e1f23747097ef18aa21b07541cabfd5f8) |
 
-- Verification method (`forge verify-contract` or a manual Blockscout upload if Cloudflare blocks the CLI): TBD
+- Verification method: `forge verify-contract --verifier sourcify --chain 4663` (Blockscout's API sits behind a Cloudflare challenge; Blockscout reads Sourcify). Jobs `b5561886…`, `90141445…`, `0e503b4f…`: all `match` for creation and runtime bytecode.
 - `forge script script/CheckDeployment.s.sol --rpc-url <4663>` output (`CheckDeployment: OK`, fence prices and codes):
-  TBD
-- `pendingImplementation(1)` at deploy (expected none): TBD
+  `CheckDeployment: OK`; fence USDG 0.99995090 code 0; NVDA 222.44729849 code 5 (market closed: Saturday).
+- `pendingImplementation(1)` at deploy (expected none): none (first registration is instant).
 
 **Lane A**
 
