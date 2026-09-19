@@ -1,0 +1,151 @@
+DeltaDesk M2 contracts: fork suites against the Robinhood Chain archive (Alchemy), 2026-09-19
+
+command : RH_ARCHIVE_RPC=<alchemy 4663 archive> FOUNDRY_PROFILE=fork forge test -vv        (run 1, 12:31-12:53 UTC)
+          DESK_INVARIANT_LOG=reports/fork-inv-2026-09-19.jsonl FOUNDRY_PROFILE=fork \
+          forge test --mc 'ForkInvariantsTest|ForkAdversarialTest' -vv                     (run 2, 12:54-13:03 UTC)
+blocks  : WEEKDAY_BLOCK 66,315,359 (Fri 2026-09-18 15:00 UTC); SATURDAY_BLOCK 66,851,211 (Sat 2026-09-19 06:00 UTC)
+result  : 5 suites, 23 tests, all passing (after two harness fixes below); fork invariants 50 runs x depth 20,
+          I1-I14 violations all 0
+
+Run 1 (all five suites)
+  ForkSanity         7/7   (incl. test_weekendBlockClosesRiskAdding at the Saturday block)
+  ForkLifecycle      2/2
+  ForkFiftyReranges  1/1   test_fiftyReranges (634 s)
+  ForkAdversarial   11/12  test_sandwichAfterReadReverts failed with NotAuthorized: a TEST bug. `_tick()` (an external
+                           pool.slot0 call) sat inside the vm.expectRevert arguments after vm.prank(operator) and
+                           consumed the prank, so rerange ran as the test contract. Fixed by reading the tick first.
+  ForkInvariants     aborted on its first log write: DESK_INVARIANT_LOG pointed outside foundry.toml fs_permissions
+                     (an operator error, not a contract failure; the other 12 invariants were green at that point).
+Run 2 (the two affected suites, same blocks)
+  ForkAdversarial   12/12
+  ForkInvariants     13 invariant functions PASS (I2 ownerCanAlwaysExit runs in afterInvariant), 50 runs, 1000 calls,
+                     0 handler reverts
+
+Invariant campaign summary (reports/summarize.py over reports/fork-inv-2026-09-19.jsonl + the run 2 output):
+  runs logged: 52
+  handler actions: 1022   lane calls: ok 337, reverted 227
+  violations: I1=0, I2=0, I3=0, I4=0, I5=0, I6=0, I7=0, I8=0, I9=0, I10=0, I11=0, I12=0, I13=0, I14=0
+  
+  inner action                        calls  lane ok lane rev
+  honest.rerange                         85       59       23
+  honest.reducing                        95       75       20
+  evil.rerange                           90       11       79
+  evil.call                              63       43       20
+  evil.rawCalldata                       22        9       13
+  attacker.swap                          23        0        0
+  attacker.donate                         7        0        0
+  attacker.sendNft                       11        0        0
+  attacker.npmDirect                     11        0        0
+  attacker.increaseLanePosition          13        0        0
+  attacker.spoofCallback                 11        0        0
+  attacker.laneCall                      28       19        9
+  owner.withdraw                          5        5        0
+  owner.withdrawAll                       6        6        0
+  owner.withdrawPosition                  5        0        5
+  owner.pause                             3        3        0
+  owner.unpause                          11       11        0
+  owner.tightenCaps                       3        3        0
+  owner.loosenCaps                        8        8        0
+  owner.applyCaps                        13        0       13
+  owner.cancelCaps                        3        0        3
+  owner.operator                          7        1        3
+  owner.guardian                          5        5        0
+  owner.closedUntil                       6        6        0
+  owner.deposit                           8        0        0
+  owner.rerange                          22       13        9
+  guardian.reducing                      43       38        5
+  guardian.closedUntil                   22       20        2
+  guardian.forbidden                     23        0       23
+  env.warp                               86        2        0
+  env.movePrice                          93        0        0
+  env.chainlinkStockStep                 24        0        0
+  env.chainlinkQuoteStep                  7        0        0
+  env.feedAge                             6        0        0
+  env.feedDecimals                        6        0        0
+  env.feedRevert                          9        0        0
+  env.feedBroken                         11        0        0
+  env.oraclePaused                        3        0        0
+  env.corporateAction                     6        0        0
+  env.feedHeal                           10        0        0
+  env.tokenPause                        109        0        0
+  
+  lane reverts by error:
+    NotOwner                         0x30cd7471 45
+    BadSlot                          0xbdfde03c 36
+    MarketClosed                     0x3e363de9 23
+    ClosedUntilActive                0x6468cd23 22
+    NoPending                        0xda7557bc 19
+    (no data: unknown selector / bad ABI) 0x00000000 13
+    RangeOutsideFence                0x1657574a 11
+    BadRange                         0x6780aeff 10
+    TooManyRanges                    0x24566020 8
+    NotAuthorized                    0xea8e4eb5 6
+    ZeroDecision                     0x2f337454 5
+    IsPaused                         0x1309a563 5
+    PoolTickMoved                    0x60a6fa99 5
+    SharesExceed                     0xc01e0186 4
+    NotFactory                       0x32cc7236 3
+    DeadlineTooFar                   0xf1290398 3
+    Error(string)                    0x08c379a0 2
+    DecisionUsed                     0xfb838d5d 2
+    TickDeltaAboveCap                0xcb1b342c 2
+    TooSoon                          0xe08a03ea 2
+    Expired                          0x95693653 1
+  
+  riskReranges       total       61   max/run      4   runs with >0: 30
+  mints              total       71   max/run      5   runs with >0: 30
+  priceSteps         total       35   max/run      3   runs with >0: 25
+  corpSteps          total        4   max/run      1   runs with >0: 4
+  donations          total       17   max/run      1   runs with >0: 17
+  foreignNfts        total       10   max/run      2   runs with >0: 8
+  decisionIds        total      336   max/run     11   runs with >0: 52
+  turnover minted (fence-valued): total $1,823.66, max/run $124.94
+  max exitAll gas at the end of a run: 527,328
+  I7 tightness: max per-mint worst-case loss / (band x notional) = 43.18%
+  I7 tightness: max fence-valued loss / I7 allowance at any point of a run = 31.18%
+  fence-valued P&L at run end: min -0.077373 USD, max 0.529558 USD
+  
+  forge output (invariant results and per-selector metrics):
+    Suite result: ok. 12 passed; 0 failed; 0 skipped; finished in 3.47s (59.62ms CPU time)
+    ForkInvariantsTest invariants:
+    [PASS] invariant_I10_placementFence
+    [PASS] invariant_I11_noRiskAddingWhileClosed
+    [PASS] invariant_I12_nftBookkeeping
+    [PASS] invariant_I13_deadlineWindow
+    [PASS] invariant_I14_refTickFollowsFeeds
+    [PASS] invariant_I1_outflowsOnlyToOwnerOrOwnMints
+    [PASS] invariant_I3_decisionIdsSpentOnce
+    [PASS] invariant_I4_budgetsMatchModel
+    [PASS] invariant_I5_noAllowances
+    [PASS] invariant_I6_onlyLanePool
+    [PASS] invariant_I7_boundedLoss
+    [PASS] invariant_I8_rolesAndConfig
+    [PASS] invariant_I9_exitLiveness
+     ForkInvariantsTest invariants (runs: 50, calls: 1000, reverts: 0)
+    ╭-------------+---------------+-------+---------+----------╮
+    | Contract    | Selector      | Calls | Reverts | Discards |
+    +==========================================================+
+    | DeskHandler | attackerAct   | 103   | 0       | 0        |
+    |-------------+---------------+-------+---------+----------|
+    | DeskHandler | evilCall      | 83    | 0       | 0        |
+    |-------------+---------------+-------+---------+----------|
+    | DeskHandler | evilRerange   | 87    | 0       | 0        |
+    |-------------+---------------+-------+---------+----------|
+    | DeskHandler | guardianAct   | 88    | 0       | 0        |
+    |-------------+---------------+-------+---------+----------|
+    | DeskHandler | honestReduce  | 92    | 0       | 0        |
+    |-------------+---------------+-------+---------+----------|
+    | DeskHandler | honestRerange | 95    | 0       | 0        |
+    |-------------+---------------+-------+---------+----------|
+    | DeskHandler | movePrice     | 91    | 0       | 0        |
+    |-------------+---------------+-------+---------+----------|
+    | DeskHandler | oracleAct     | 81    | 0       | 0        |
+    |-------------+---------------+-------+---------+----------|
+    | DeskHandler | ownerAct      | 91    | 0       | 0        |
+    |-------------+---------------+-------+---------+----------|
+    | DeskHandler | tokenAct      | 106   | 0       | 0        |
+    |-------------+---------------+-------+---------+----------|
+    | DeskHandler | warp          | 83    | 0       | 0        |
+    ╰-------------+---------------+-------+---------+----------╯
+    Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 531.02s (527.55s CPU time)
+    Ran 2 test suites in 531.03s (534.49s CPU time): 13 tests passed, 0 failed, 0 skipped (13 total tests)

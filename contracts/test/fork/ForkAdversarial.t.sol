@@ -38,8 +38,9 @@ contract ForkAdversarialTest is ForkBase {
         int24 t = _tick();
         mover.moveTo(t + 30);
         IDeskTypes.Meta memory m = _meta();
+        int24 moved = _tick(); // read before the prank: an external call inside the expectRevert args would consume it
         vm.prank(operator);
-        vm.expectRevert(abi.encodeWithSelector(IDeskLane.PoolTickMoved.selector, _tick(), t, 10));
+        vm.expectRevert(abi.encodeWithSelector(IDeskLane.PoolTickMoved.selector, moved, t, 10));
         lane.rerange(m, r, t, 10);
     }
 
