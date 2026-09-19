@@ -1,4 +1,5 @@
-// GENERATED from contracts/abi/IDeskLane.json (the FROZEN M2 interface snapshot). Do not edit by hand.
+// GENERATED from contracts/abi/IDeskLane.json (the FROZEN M2 interface snapshot) plus the "lane" errors, events and
+// no views from contracts/abi/extras.json. Do not edit by hand.
 // Regenerate: node web/lib/desk/abi/sync.mjs
 
 export const deskLaneAbi = [
@@ -1670,5 +1671,21 @@ export const deskLaneAbi = [
     "type": "error",
     "name": "ZeroDecision",
     "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ReentrancyGuardReentrantCall",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "SafeERC20FailedOperation",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
   }
 ] as const;

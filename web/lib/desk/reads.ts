@@ -1,10 +1,11 @@
 // Read-only chain views for the desk UI. Every read goes straight to Robinhood Chain; nothing depends on desk-agent.
-import { encodeAbiParameters, keccak256, type Address, type Hex } from "viem";
+import { encodeAbiParameters, keccak256, zeroAddress, type Address, type Hex } from "viem";
 import { deskLaneAbi } from "./abi/DeskLane";
 import { deskLaneFactoryAbi } from "./abi/DeskLaneFactory";
 import { aggregatorAbi, erc20Abi, npmAbi, v3PoolAbi } from "./abi/external";
 import type { Caps } from "./caps";
 import { ADDR, KIND_V3_LP, LANE_A, publicClient } from "./chain";
+import { isZeroAddr } from "./format";
 
 export type CreateParams = {
   owner: Address;
@@ -156,7 +157,19 @@ export async function readLane(lane: Address): Promise<LaneState | null> {
   };
 }
 
-export type FactoryState = { implementation: Address | null; poolAllowed: boolean; ceilings: Caps | null; lanes: readonly Address[] };
+/**
+ * A proposed replacement for the v3 lane implementation: every predicted address moves once it is applied. `unreadable`
+ * when the factory did not answer pendingImplementation, which the wizard treats like a pending one (fail closed).
+ */
+export type PendingImplementation = { implementation: Address; eta: number } | { unreadable: true };
+
+export type FactoryState = {
+  implementation: Address | null;
+  pending: PendingImplementation | null;
+  poolAllowed: boolean;
+  ceilings: Caps | null;
+  lanes: readonly Address[];
+};
 
 export async function readFactory(factory: Address, owner: Address | null): Promise<FactoryState> {
   const f = { address: factory, abi: deskLaneFactoryAbi } as const;
@@ -166,16 +179,111 @@ export async function readFactory(factory: Address, owner: Address | null): Prom
       { ...f, functionName: "implementations", args: [KIND_V3_LP] },
       { ...f, functionName: "poolAllowed", args: [LANE_A.pool, KIND_V3_LP] },
       { ...f, functionName: "ceilings" },
-      { ...f, functionName: "lanesOf", args: [owner ?? "0x0000000000000000000000000000000000000000"] },
+      { ...f, functionName: "lanesOf", args: [owner ?? zeroAddress] },
+      { ...f, functionName: "pendingImplementation", args: [KIND_V3_LP] },
     ],
   });
   const impl = ok(r[0]);
+  const pend = ok(r[4]);
   return {
     implementation: impl && BigInt(impl) !== BigInt(0) ? impl : null,
+    pending: !pend ? { unreadable: true } : isZeroAddr(pend[0]) ? null : { implementation: pend[0], eta: Number(pend[1]) },
     poolAllowed: ok(r[1]) ?? false,
     ceilings: ok(r[2]),
     lanes: owner ? (ok(r[3]) ?? []) : [],
   };
+}
+
+/** What the chain says about a (predicted or created) lane address, for the create step's checks. */
+export type LaneCheck = {
+  lane: Address;
+  code: boolean;
+  /** factory.listed(lane): its owner confirmed it with its own createLane, so lanesOf(owner) lists it. */
+  listed: boolean;
+  /** lane is in lanesOf(expected owner) */
+  inOwnerList: boolean;
+  owner: Address | null;
+  operator: Address | null;
+  guardian: Address | null;
+  caps: Caps | null;
+};
+
+export async function readLaneCheck(factory: Address, lane: Address, owner: Address): Promise<LaneCheck> {
+  const f = { address: factory, abi: deskLaneFactoryAbi } as const;
+  const c = { address: lane, abi: deskLaneAbi } as const;
+  const [code, r] = await Promise.all([
+    hasCode(lane),
+    publicClient.multicall({
+      allowFailure: true,
+      contracts: [
+        { ...f, functionName: "listed", args: [lane] },
+        { ...f, functionName: "lanesOf", args: [owner] },
+        { ...c, functionName: "owner" },
+        { ...c, functionName: "operator" },
+        { ...c, functionName: "guardian" },
+        { ...c, functionName: "caps" },
+      ],
+    }),
+  ]);
+  const listed = ok(r[0]);
+  const lanes = ok(r[1]);
+  // Unanswered reads stay null (and so mismatch), never a default that could pass the checks.
+  if (listed == null || lanes == null) throw new Error("Could not read the factory's lane list.");
+  return {
+    lane,
+    code,
+    listed,
+    inOwnerList: lanes.some((l) => l.toLowerCase() === lane.toLowerCase()),
+    owner: code ? ok(r[2]) : null,
+    operator: code ? ok(r[3]) : null,
+    guardian: code ? ok(r[4]) : null,
+    caps: code ? ok(r[5]) : null,
+  };
+}
+
+const sameAddr = (a: string | null | undefined, b: string | null | undefined) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
+
+const CAP_KEYS: (keyof Caps)[] = ["maxDeployUsd6", "turnoverUsd6PerDay", "placeBandBps", "maxTickDelta", "minWidthTicks", "maxWidthTicks", "reranges1h", "reranges24h", "minRerangeInterval", "maxDeadlineAhead", "maxRanges"];
+
+/** Caps fields whose values differ (viem returns the uint64 fields as bigint and the rest as numbers). */
+export const capsDiff = (a: Caps, b: Caps): string[] => CAP_KEYS.filter((k) => BigInt(a[k]) !== BigInt(b[k]));
+
+/** What the Vault asked createLane for. */
+export type LaneWant = { owner: Address; operator: Address; guardian: Address; caps: Caps };
+
+/**
+ * Every way an existing lane differs from what the Vault asked for: listed for this owner, owner, operator, guardian
+ * and caps. Empty means the lane is exactly the one the wizard set up.
+ */
+export function laneMismatches(c: LaneCheck, want: LaneWant, opts: { requireListed: boolean }): string[] {
+  const out: string[] = [];
+  if (!c.code) return ["no contract at this address"];
+  if (opts.requireListed && (!c.listed || !c.inOwnerList)) out.push("the factory does not list it for your Vault");
+  if (!sameAddr(c.owner, want.owner)) out.push(`owner is ${c.owner ?? "unreadable"}, not your Vault ${want.owner}`);
+  if (!sameAddr(c.operator, want.operator)) out.push(`operator is ${c.operator ?? "unreadable"}, not your Operator ${want.operator}`);
+  if (!sameAddr(c.guardian, want.guardian)) out.push(`guardian is ${c.guardian ?? "unreadable"}, not ${isZeroAddr(want.guardian) ? "none" : want.guardian}`);
+  if (!c.caps) out.push("caps are unreadable");
+  else {
+    const diff = capsDiff(c.caps, want.caps);
+    if (diff.length) out.push(`caps differ from what you chose (${diff.join(", ")})`);
+  }
+  return out;
+}
+
+export type LaneRoles = { lane: Address; owner: Address | null; operator: Address | null; guardian: Address | null };
+
+/** owner, operator and guardian of several lanes in one multicall (null where a read fails). */
+export async function readLaneRoles(lanes: readonly Address[]): Promise<LaneRoles[]> {
+  if (!lanes.length) return [];
+  const r = await publicClient.multicall({
+    allowFailure: true,
+    contracts: lanes.flatMap((lane) => [
+      { address: lane, abi: deskLaneAbi, functionName: "owner" } as const,
+      { address: lane, abi: deskLaneAbi, functionName: "operator" } as const,
+      { address: lane, abi: deskLaneAbi, functionName: "guardian" } as const,
+    ]),
+  });
+  return lanes.map((lane, i) => ({ lane, owner: ok(r[3 * i]), operator: ok(r[3 * i + 1]), guardian: ok(r[3 * i + 2]) }));
 }
 
 /**

@@ -11,12 +11,13 @@ export const metadata: Metadata = {
   description: "Can LPs beat informed flow on tokenized stocks? Every swap in Robinhood Chain's stock pools, marked against Hyperliquid's 24/7 price.",
 };
 
-const NAV = [
+// /desk is never prefetched: it mounts the wallet SDK, which should load only when someone opens a desk page.
+const NAV: { href: string; label: string; prefetch?: boolean }[] = [
   { href: "/", label: "Study" },
   { href: "/live", label: "Live desk" },
   { href: "/tearsheet", label: "Tearsheet" },
   { href: "/league", label: "League" },
-  { href: "/desk", label: "Desk" },
+  { href: "/desk", label: "Desk", prefetch: false },
 ];
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -31,7 +32,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             </Link>
             <div className="-mx-2 flex text-sm sm:mx-0 sm:gap-1">
               {NAV.map((n) => (
-                <Link key={n.href} href={n.href} className="whitespace-nowrap rounded-lg px-2 py-1.5 text-ink-2 hover:bg-surface-2 hover:text-ink sm:px-3">{n.label}</Link>
+                <Link key={n.href} href={n.href} prefetch={n.prefetch} className="whitespace-nowrap rounded-lg px-2 py-1.5 text-ink-2 hover:bg-surface-2 hover:text-ink sm:px-3">{n.label}</Link>
               ))}
             </div>
           </div>

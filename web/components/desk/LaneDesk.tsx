@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import type { Address } from "viem";
 import { capsRows } from "@/lib/desk/caps";
-import { LANE_A, addressUrl } from "@/lib/desk/chain";
+import { CHAIN_ID, EXPLORER_URL, LANE_A, RPC_URL, addressUrl } from "@/lib/desk/chain";
 import { DESK_FACTORY } from "@/lib/desk/config";
 import { ago, fmtEth, fmtUnits, fmtUsd, isZeroAddr, positionAmounts, short } from "@/lib/desk/format";
+import { ownerDecisionId } from "@/lib/desk/meta";
 import { readEthBalances, readLane, type LaneState } from "@/lib/desk/reads";
 import { fenceCodeLabel } from "@/lib/desk/tx";
 import AgentPanel from "./AgentPanel";
@@ -14,7 +16,7 @@ import { DYNAMIC_SLOW_HINT, usePoll, useSlow } from "./hooks";
 import OwnerControls, { type OwnerSigner } from "./OwnerControls";
 import RangeStrip from "./RangeStrip";
 import type { DeskSession } from "./session";
-import { Addr, Card, Meter, Notice, Pill, type Tone } from "./ui";
+import { Addr, Card, CopyButton, Meter, Notice, Pill, type Tone } from "./ui";
 import VaultAlarm from "./VaultAlarm";
 
 export default function LaneDesk({ lane }: { lane: Address }) {
@@ -109,6 +111,12 @@ export function LaneBody({ s, operatorEth, session, error, refresh }: { s: LaneS
           <Role label="Operator (agent)" address={isZeroAddr(s.operator) ? null : s.operator} />
           <Role label="Guardian" address={isZeroAddr(s.guardian) ? null : s.guardian} />
         </dl>
+        <p className="text-sm">
+          {/* The lane holds the positions, so its tearsheet reads it as the LP owner. No prefetch: the tearsheet is a paid API read. */}
+          <Link href={`/tearsheet?chain=robinhood&wallet=${s.lane.toLowerCase()}&as=owner`} prefetch={false} className="text-ink-2 underline underline-offset-2 hover:text-ink">
+            This lane&apos;s tearsheet →
+          </Link>
+        </p>
         {error && <p className="text-xs text-muted">Last refresh failed ({error}); showing the previous read.</p>}
       </header>
 
@@ -158,12 +166,93 @@ export function LaneBody({ s, operatorEth, session, error, refresh }: { s: LaneS
               </dl>
             </details>
           )}
+
+          <LastResort s={s} />
         </div>
       </div>
       <p className="text-xs text-muted tabular">
         Chain time {new Date(s.chainTime * 1000).toLocaleTimeString()} · refreshes every 5 s · NVDA {nvdaUsd?.toFixed(2) ?? "–"} USD (Chainlink{s.prices.nvdaUpdatedAt ? `, ${ago(s.chainTime - s.prices.nvdaUpdatedAt)} old` : ""})
       </p>
     </div>
+  );
+}
+
+/**
+ * The documented last resort (M2 plan, "Start a desk"): if this site, desk-agent or Dynamic's sign-in is unavailable, the
+ * Vault owner calls the lane directly on the explorer after exporting the Vault's key from Dynamic.
+ */
+function LastResort({ s }: { s: LaneState }) {
+  const [exampleId] = useState(() => ownerDecisionId());
+  const ahead = s.caps?.maxDeadlineAhead ?? 120;
+  const deadline = s.chainTime + Math.min(60, Math.max(1, ahead - 10));
+  const explorer = addressUrl(s.lane);
+  const code = "rounded bg-surface-2 px-1 font-mono text-xs";
+  const held = s.slots.flatMap((id, slot) => (id > BigInt(0) ? [`slot ${slot}: NFT #${id.toString()}`] : []));
+  return (
+    <details className="card p-5">
+      <summary className="cursor-pointer text-base font-semibold">If DeltaDesk is down</summary>
+      <div className="mt-3 space-y-3 text-sm text-ink-2">
+        <p>
+          The owner controls on this page are signed by your Vault in the browser and don&apos;t need desk-agent. If this site or Dynamic&apos;s sign-in is unavailable too, the
+          last resort is to call the lane contract yourself from the Vault:
+        </p>
+        <ol className="list-decimal space-y-2 pl-5">
+          <li>
+            Export the Vault&apos;s private key from Dynamic (Private Key Exports is enabled for the Vault; the Operator&apos;s export is blocked by its policy, and the Operator
+            can&apos;t withdraw anyway). Import it into an EVM wallet and add Robinhood Chain: chain {CHAIN_ID}, RPC <span className="break-all font-mono text-xs">{RPC_URL}</span>.
+          </li>
+          <li>
+            Open the lane&apos;s verified contract on the Robinhood Chain explorer,{" "}
+            <a href={`${explorer}?tab=write_contract`} target="_blank" rel="noreferrer" className="break-all font-mono text-xs text-ink underline">
+              {explorer.replace(/^https:\/\//, "")}
+            </a>
+            , go to the <strong>Write contract</strong> tab (Blockscout may list a clone&apos;s functions under <strong>Write proxy</strong>) and connect that wallet.
+          </li>
+          <li>
+            Optional, to stop the agent first: <code className={code}>pause()</code>, then <code className={code}>revokeOperator()</code>.
+          </li>
+          <li>
+            <code className={code}>exitAll(m)</code> unwinds every position into USDG and NVDA held by the lane. Fill <code className={code}>m</code> as:
+            <dl className="mt-1 space-y-1 text-xs">
+              <div className="flex flex-wrap items-center gap-x-2">
+                <dt>decisionId</dt>
+                <dd className="flex min-w-0 items-center gap-1">
+                  <span className="break-all font-mono">{exampleId}</span> <CopyButton text={exampleId} />
+                </dd>
+                <dd className="w-full text-muted">any non-zero 32-byte value never used before; this one is fresh</dd>
+              </div>
+              <div className="flex flex-wrap items-center gap-x-2">
+                <dt>deadline</dt>
+                <dd className="font-mono">{deadline}</dd>
+                <dd className="w-full text-muted">
+                  a Unix time at most {ahead} s ahead of the chain (now {s.chainTime}); this value refreshes with the page, so send within a minute
+                </dd>
+              </div>
+              <div className="flex flex-wrap gap-x-2">
+                <dt>regime, gatesMask</dt>
+                <dd className="font-mono">0, 0</dd>
+              </div>
+              <div className="flex flex-wrap gap-x-2">
+                <dt>reasonHash</dt>
+                <dd className="break-all font-mono">0x{"0".repeat(64)}</dd>
+              </div>
+            </dl>
+          </li>
+          <li>
+            <code className={code}>withdrawAll()</code> sends every idle USDG and NVDA to the Vault.
+          </li>
+          <li>
+            If a slot still holds a position after <code className={code}>exitAll</code>, <code className={code}>withdrawPosition(slot)</code> transfers that slot&apos;s
+            position NFT to the Vault as it is, with no deadline to fill ({held.length ? held.join(", ") : "no slot holds a position right now"}). Remove its liquidity from
+            the Vault afterwards. <code className={code}>exitAll</code> doesn&apos;t fail on a bad slot: when a token is paused or blocklists the lane, it still succeeds, but
+            the lane emits <code className={code}>CollectFailed</code> for that position and leaves it in its slot.
+          </li>
+        </ol>
+        <p>
+          Only the Vault can call these, and the lane pays out only to the Vault. Explorer: <span className="font-mono text-xs">{EXPLORER_URL}</span>.
+        </p>
+      </div>
+    </details>
   );
 }
 

@@ -19,6 +19,9 @@ export const bad = (error: string, status = 400) => json({ error }, status);
 /** Canonical lane address from a route param, or null when it is not an address (never interpolate raw input). */
 export const laneParam = (raw: string): Address | null => (isAddress(raw) ? getAddress(raw) : null);
 
+/** Like laneParam but case-insensitive (a lowercase or uppercase hex address is fine; the result is checksummed). */
+export const addressParam = (raw: string): Address | null => (isAddress(raw, { strict: false }) ? getAddress(raw) : null);
+
 /** Reads a small JSON body; null on oversize or invalid JSON. */
 export async function readJson(req: Request): Promise<Record<string, unknown> | null> {
   const len = Number(req.headers.get("content-length") ?? 0);
@@ -33,8 +36,12 @@ export async function readJson(req: Request): Promise<Record<string, unknown> | 
   }
 }
 
-/** Forwards to desk-agent and relays its JSON and status. `path` must be built from validated values only. */
-export async function agentFetch(req: Request, path: string, init: { method: "GET" | "POST"; body?: unknown }): Promise<Response> {
+/**
+ * Forwards to desk-agent and relays its JSON and status. `path` must be built from validated values only. `pick` is for
+ * routes whose contract is a fixed shape: a successful response keeps only those top-level fields, and any other
+ * response is reduced to `{ error }` (a string, at most 300 characters), whatever else desk-agent sent.
+ */
+export async function agentFetch(req: Request, path: string, init: { method: "GET" | "POST"; body?: unknown; pick?: readonly string[] }): Promise<Response> {
   if (!AGENT) return bad("desk-agent is not configured (AGENT_API_URL is unset)", 503);
   const headers: Record<string, string> = { accept: "application/json" };
   if (KEY) headers[AGENT_KEY_HEADER] = KEY;
@@ -57,7 +64,12 @@ export async function agentFetch(req: Request, path: string, init: { method: "GE
     } catch {
       body = { error: text.slice(0, 300) || res.statusText };
     }
-    if (!res.ok && (typeof body !== "object" || body === null || !("error" in body))) body = { error: res.statusText, detail: body };
+    if (init.pick) {
+      const src = body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
+      body = res.ok
+        ? Object.fromEntries(init.pick.filter((k) => k in src).map((k) => [k, src[k]]))
+        : { error: (typeof src.error === "string" && src.error ? src.error : res.statusText || `HTTP ${res.status}`).slice(0, 300) };
+    } else if (!res.ok && (typeof body !== "object" || body === null || !("error" in body))) body = { error: res.statusText, detail: body };
     return json(body, res.status);
   } catch (e) {
     return bad(`desk-agent unreachable: ${e instanceof Error ? e.message : "request failed"}`, 502);

@@ -1,12 +1,12 @@
 "use client";
 
-import { encodeFunctionData, type Address } from "viem";
+import { encodeFunctionData, parseEventLogs, type Address, type Log } from "viem";
 import { deskLaneAbi } from "@/lib/desk/abi/DeskLane";
 import { LANE_A } from "@/lib/desk/chain";
 import { fmtUnits, isZeroAddr } from "@/lib/desk/format";
 import { ownerMeta } from "@/lib/desk/meta";
 import type { LaneState } from "@/lib/desk/reads";
-import { sendFromWallet, type EthereumWallet } from "@/lib/desk/tx";
+import { sendFromWallet, type EthereumWallet, type SentTx } from "@/lib/desk/tx";
 import { useAction } from "./hooks";
 import { Btn, Card, ConfirmButton, Status, TxLine } from "./ui";
 
@@ -22,6 +22,23 @@ export type OwnerSigner = {
 };
 
 /**
+ * What exitAll did to the positions. It never reverts on one bad slot: a position it can't unwind (a paused or
+ * blocklisting token makes the position manager's collect, decrease or burn fail) stays in its slot, and the lane emits
+ * CollectFailed(tokenId) for it instead. `slots` is the lane's slots before the exit, to name the slot.
+ */
+export function exitAllNote(logs: readonly Log[], lane: Address, slots: readonly bigint[]): string {
+  const own = logs.filter((l) => l.address.toLowerCase() === lane.toLowerCase());
+  const kept = [...new Set(parseEventLogs({ abi: deskLaneAbi, eventName: "CollectFailed", logs: own }).map((e) => e.args.tokenId))];
+  if (!kept.length) return "All positions unwound";
+  const names = kept.map((id) => `NFT #${id.toString()}${slots.includes(id) ? ` (slot ${slots.indexOf(id)})` : ""}`);
+  const one = kept.length === 1;
+  return (
+    `Exited, but ${names.join(" and ")} could not be unwound (the lane emitted CollectFailed: a token transfer failed, e.g. a paused token) and ` +
+    `${one ? "stays in its slot" : "stay in their slots"}. Withdraw ${one ? "it" : "them"} to your Vault as ${one ? "it is" : "they are"} with the Withdraw NFT button.`
+  );
+}
+
+/**
  * Vault-signed, on-chain, and independent of desk-agent: these work even when the agent is down or compromised.
  * None of them reads the price fence, so they also work on weekends and while NVDA is paused.
  */
@@ -32,12 +49,12 @@ export default function OwnerControls({ s, signer, onDone }: { s: LaneState; sig
   const hasPositions = s.positions.length > 0 || s.slots.some((x) => x > BigInt(0));
   const operatorLive = !isZeroAddr(s.operator);
 
-  const send = (note: string, doneNote: string, data: () => Promise<`0x${string}`> | `0x${string}`) =>
+  const send = (note: string, doneNote: string | ((r: SentTx) => string), data: () => Promise<`0x${string}`> | `0x${string}`) =>
     action.run(note, async (onHash, done) => {
       if (!vault) throw new Error("Sign in with this lane's Vault first.");
       const r = await sendFromWallet(vault, s.lane, await data(), onHash);
       onDone();
-      done(doneNote);
+      done(typeof doneNote === "string" ? doneNote : doneNote(r));
       return r;
     });
 
@@ -97,9 +114,15 @@ export default function OwnerControls({ s, signer, onDone }: { s: LaneState; sig
         <ConfirmButton
           label="Exit all"
           kind="danger"
-          confirm={hasPositions ? "Unwinds every position into idle USDG and NVDA held by the lane. Nothing leaves the lane." : "There are no open positions; this only records an exit."}
+          confirm={hasPositions ? "Unwinds every position into idle USDG and NVDA held by the lane; one whose token is paused stays in its slot. Nothing leaves the lane." : "There are no open positions; this only records an exit."}
           disabled={disabled}
-          onConfirm={() => send("Exiting all positions…", "All positions unwound", async () => encodeFunctionData({ abi: deskLaneAbi, functionName: "exitAll", args: [await ownerMeta("exitAll", s.caps?.maxDeadlineAhead ?? 120)] }))}
+          onConfirm={() =>
+            send(
+              "Exiting all positions…",
+              (r) => exitAllNote(r.receipt.logs, s.lane, s.slots),
+              async () => encodeFunctionData({ abi: deskLaneAbi, functionName: "exitAll", args: [await ownerMeta("exitAll", s.caps?.maxDeadlineAhead ?? 120)] }),
+            )
+          }
         />
 
         <ConfirmButton

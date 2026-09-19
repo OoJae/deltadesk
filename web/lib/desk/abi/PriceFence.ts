@@ -1,4 +1,5 @@
-// GENERATED from contracts/abi/IPriceFence.json (the FROZEN M2 interface snapshot). Do not edit by hand.
+// GENERATED from contracts/abi/IPriceFence.json (the FROZEN M2 interface snapshot) plus the "fence" errors, events and
+// no views from contracts/abi/extras.json. Do not edit by hand.
 // Regenerate: node web/lib/desk/abi/sync.mjs
 
 export const priceFenceAbi = [
@@ -49,5 +50,16 @@ export const priceFenceAbi = [
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "error",
+    "name": "BadConfig",
+    "inputs": [
+      {
+        "name": "index",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
   }
 ] as const;

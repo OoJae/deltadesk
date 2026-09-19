@@ -55,5 +55,16 @@ export type DeskStatus = {
   pendingApprovals?: PendingApproval[];
 };
 
+/**
+ * GET /delegations/:operator: desk-agent's record of the Operator's Dynamic delegation, readable before the desk is
+ * registered. "unknown" means no row yet (Dynamic's webhook has not reached the agent).
+ */
+export type DelegationView = {
+  operator: string;
+  status: "active" | "revoked" | "unknown";
+  walletId: string | null;
+  updatedAtMs: number | null;
+};
+
 /** Result envelope of every /api/desk/* route handler call made from the browser. */
 export type AgentResult<T> = { ok: true; data: T } | { ok: false; status: number; error: string };
