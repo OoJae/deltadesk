@@ -84,7 +84,7 @@ The handbook asks for five things. Here is where each one is:
 |---|---|
 | **The job:** the decision the agent makes | The desk agent runs a user's LP lane. Today its decision is the weekend gate: stay out of the pool, logged on-chain as a `signal()` `LaneAction`. |
 | **Wallet ownership:** pattern, owner, auth | **Delegated access.** The user owns two Dynamic embedded wallets: the **Vault**, the lane owner, which is never delegated, and the **Operator**, which is delegated to DeltaDesk. The agent signs with `delegatedSignTransaction` using the key share from the delegation webhook, decrypted with our RSA key and sealed in an AES-GCM vault. |
-| **The action:** live vs simulated | Live: {{SIGNAL_TX}}, a delegated transaction on Robinhood Chain 4663. A staged malicious transfer request, `USDG.transfer(owner, 1)` (the call a prompt injection would try), sent straight to the delegated signer by `pnpm signer-check`, is denied by the Dynamic policy (chain 4663, allowlist = lane, value 0, blockExport): {{POLICY_DENIAL_LOG}}. No LLM or prompt is involved in the probe. The live mint is Monday. |
+| **The action:** live vs simulated | Live: [`0xddbc1b92…7375`](https://robinhoodchain.blockscout.com/tx/0xddbc1b92b20332ddee6e2ec587e27246021c42b2b51444e848fab7e0d4fe7375) (weekend: market closed) and [`0xbe80e98b…3223`](https://robinhoodchain.blockscout.com/tx/0xbe80e98beb80f8f87275b01568fd451fe4ceea35881fe74c106e2826ed083223) (fair value restored), each with a `reasonHash` whose preimage is recorded, delegated transactions on Robinhood Chain 4663 approved by the owner in copilot mode. Staged malicious transfer requests (the call a prompt injection would try) were sent straight to the delegated signer: Dynamic's policy API refuses Robinhood Chain (`Unsupported chainIds for EVM: 4663`), so on 4663 the lane contract and the agent's ABI are the fence. On Base, an environment rule (allowlist = the lane address) made Dynamic's co-signer refuse the delegated Operator's staged USDC transfer (the session was dropped after 61.6 s, nothing signed), while the same key signed an allowed destination in 2.3 s: [docs/m2-desk.md §3](docs/m2-desk.md). No LLM or prompt is involved in the probe. The live mint is Monday (lane funded, market closed on-chain until Mon 01:00 UTC). |
 | **The evidence** | `docs/m2-desk.md` (the deployed and Sourcify-verified contracts, the lane, tx hashes, the denial record). |
 | **The integration:** SDK calls | README → "Code pointers" → the Agent rows: `createDelegatedSigner` / `delegatedSignTransaction`, `createDynamicDelegatedSigner`, `verifyDynamicSignature`, `decryptDelegatedWebhookData`. |
 
@@ -113,8 +113,8 @@ The handbook asks for five things. Here is where each one is:
   - `DeskLaneFactory`, `ChainlinkFence` and the `DeskLaneV3` implementation on 4663:
     `0x6968B97974aF2ba51537e751c043d5ba48d663B3`, `0xc82Cc6A466b7fE32e822A7dA59E7D9d7b726C1ea`,
     `0xBf5f4880B2f569656E913d225bcF4810Dcc4EDD9` (Sourcify full match).
-  - The user's lane {{LANE_ADDRESS}}.
-  - The delegated `signal()` {{SIGNAL_TX}}.
+  - The user's lane [`0x7f8968734E613f509991D3392074CF7f1e4bd662`](https://robinhoodchain.blockscout.com/address/0x7f8968734E613f509991D3392074CF7f1e4bd662).
+  - The delegated `signal()` [`0xddbc1b92…7375`](https://robinhoodchain.blockscout.com/tx/0xddbc1b92b20332ddee6e2ec587e27246021c42b2b51444e848fab7e0d4fe7375) (weekend: market closed) and [`0xbe80e98b…3223`](https://robinhoodchain.blockscout.com/tx/0xbe80e98beb80f8f87275b01568fd451fe4ceea35881fe74c106e2826ed083223) (fair value restored), each with a `reasonHash` whose preimage is recorded.
 - **What's next:**
   - Mon Sep 21: the first live delegated mint (~$50), then the owner's exit.
   - M3 lanes: hedged, and QQQ/SPY on v4.

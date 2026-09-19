@@ -95,8 +95,8 @@ Media: 30-second clip from the demo: the lane's LaneAction on Blockscout, then t
 ```
 Today, a Saturday, the agent's first on-chain decision was to stay out.
 
-signal() tx: {{SIGNAL_TX}}
-A staged malicious transfer from the agent's wallet, denied by the Dynamic policy: {{POLICY_DENIAL_LOG}}
+signal() tx: https://robinhoodchain.blockscout.com/tx/0xddbc1b92b20332ddee6e2ec587e27246021c42b2b51444e848fab7e0d4fe7375
+A staged malicious transfer from the agent's wallet: Dynamic's co-signer refused it (on Base; Dynamic policies don't cover Robinhood Chain yet, where our contract is the fence).
 
 First live mint Monday, posted here.
 ```
