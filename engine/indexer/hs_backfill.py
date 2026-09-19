@@ -108,12 +108,12 @@ SPECS["base_aero_lp_txs"] = Spec(
     join=JoinMode.JOIN_ALL, txs=True, keep_log_addresses=[AERO_NVDA_POOL, AERO_NVDA_GAUGE, AERO_NPM_EQUITY],
     chain="8453", start_block=BASE_START, chunk_blocks=250_000,
 )
-SPECS["base_npm_transfers"] = Spec([([AERO_NPM_EQUITY], [[T_TRANSFER]])], chain="8453", start_block=BASE_START)
+SPECS["base_npm_transfers"] = Spec([([AERO_NPM_EQUITY], [[T_TRANSFER]])], chain="8453", start_block=BASE_START, chunk_blocks=250_000)
 SPECS["base_aero_swap_txs"] = Spec(
     selections=[([AERO_NVDA_POOL], [[T_V3_SWAP]])], logs=False, txs=True,
     log_fields=[LogField.BLOCK_NUMBER, LogField.TRANSACTION_HASH], chain="8453", start_block=BASE_START, chunk_blocks=250_000,
 )
-SPECS["base_aero_usdc"] = Spec([([AERO_USDC_POOL], [[T_V3_SWAP]])], chain="8453", start_block=BASE_START)
+SPECS["base_aero_usdc"] = Spec([([AERO_USDC_POOL], [[T_V3_SWAP]])], chain="8453", start_block=BASE_START, chunk_blocks=250_000)
 
 LOG_FIELDS = [LogField.BLOCK_NUMBER, LogField.TRANSACTION_INDEX, LogField.LOG_INDEX, LogField.TRANSACTION_HASH,
               LogField.ADDRESS, LogField.TOPIC0, LogField.TOPIC1, LogField.TOPIC2, LogField.TOPIC3, LogField.DATA]
@@ -151,7 +151,8 @@ async def fetch(client: hypersync.HypersyncClient, name: str, spec: Spec, to_blo
             hi = min(lo + spec.chunk_blocks, to_block)
             for attempt in range(4):  # a stalled stream costs one chunk, not the run
                 try:
-                    await asyncio.wait_for(fetch_range(client, name, spec, lo, hi), timeout=300)
+                    # generous: the client sleeps through HyperSync rate-limit windows (30 req/min per token)
+                    await asyncio.wait_for(fetch_range(client, name, spec, lo, hi), timeout=900)
                     break
                 except asyncio.TimeoutError:
                     print(f"{name}: chunk {lo}..{hi} timed out (attempt {attempt + 1}); retrying", flush=True)
@@ -231,7 +232,10 @@ async def main():
     for name in wanted:
         chain = SPECS[name].chain
         if chain not in clients:
-            clients[chain] = hypersync.HypersyncClient(ClientConfig(url=URLS[chain], bearer_token=token(), http_req_timeout_millis=120_000, max_num_retries=12))
+            # The token is rate limited (30 req/min) and may be shared (server + laptop): back off past the 60 s window
+            # instead of burning retries on 429s the client could not predict.
+            clients[chain] = hypersync.HypersyncClient(ClientConfig(url=URLS[chain], api_token=token(), http_req_timeout_millis=120_000,
+                                                                    max_num_retries=12, retry_ceiling_ms=65_000))
             heights[chain] = await clients[chain].get_height()
             print(f"hypersync {chain} height {heights[chain]}", flush=True)
         await fetch(clients[chain], name, SPECS[name], heights[chain])
