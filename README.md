@@ -101,6 +101,9 @@ Or `docker build -t deltadesk . && docker run -p 8787:8787 -e ENVIO_API_TOKEN=â€
 - **Live:**
   - Aerodrome (Base) tearsheets for staked and unstaked positions (fees kept, AERO, penalties, voter share).
   - x402 endpoints on Bankr: `https://x402.bankr.bot/0xd8d5b9389721258bcdfa7ac1306af6330e5634cd/<service>`.
+    First paid call (`safe-to-lp?pool=NVDA`, $0.005 USDC) settled on Base in tx
+    [`0x309ddc0câ€¦6708`](https://basescan.org/tx/0x309ddc0cbc51eccddf649fa001a25ecdc049179e402bc6dad91e798c8c8e6708)
+    (2026-09-19 06:20 UTC).
 - **Next:** the desk itself.
   - A DeskAccount contract that can only pay its owner.
   - A delegated agent executor.
