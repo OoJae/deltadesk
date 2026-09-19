@@ -182,7 +182,10 @@ def run() -> dict:
         (pl.col("vs_hodl_usd") * per_k / days).alias("vs_hodl_per_1k_per_day"), (pl.col("aero_usd") * per_k / days).alias("aero_per_1k_per_day"),
         ((pl.col("fee_usd_hlv1h") + pl.col("aero_usd")) / pl.col("picked_hl_1h")).alias("edge_hl_1h_incl_aero"),
     )
-    att = att.join(pos.select("pos_id", "owner"), on="pos_id", how="left")
+    # per-regime attribution comes out of run_pool with GROSS fees; scale by the position's kept / gross ratio (exact for
+    # positions that were only ever staked or only unstaked; for mixed ones it assumes the same mix in every regime)
+    ratio = pos.select("pos_id", pl.when(pl.col("fee_usd_gross") > 0).then(pl.col("fee_usd") / pl.col("fee_usd_gross")).otherwise(0.0).alias("_keep"), "owner")
+    att = att.join(ratio, on="pos_id", how="left").with_columns(*[(pl.col(m) * pl.col("_keep")).alias(m) for m in FEE_METRICS]).drop("_keep")
     owners = owners_table(pos, seg)
 
     # reconciliation
