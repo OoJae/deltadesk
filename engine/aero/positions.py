@@ -133,6 +133,25 @@ def claims_by_user() -> pl.DataFrame:
                                   pl.col("amount").filter(pl.col("topic0") == T_EARLY_PENALTY).sum().alias("aero_forfeited"))
 
 
+GOLDEN_COLS = ["pos_id", "owner", "lifetime_days", "staked_share", "avg_notional_usd", "fee_usd_gross", "fee_usd", "fees_to_voters_usd",
+               "realized_fee_usd", "residual_usd", "residual_bp", "aero_earned", "aero_forfeited", "aero_usd", "picked_hl_1h", "il_usd",
+               "gas_usd", "vs_hodl_usd"]
+
+
+def pick_golden(pos: pl.DataFrame, per_user: pl.DataFrame) -> list[dict]:
+    """Golden pair on objective criteria (not on residual): the unstaked closed position (NFT burned ⇒ fully collected,
+    lifetime ≥ 1 day) with the largest fees kept, and the mostly-staked (> 50%) closed, fully collected position with the
+    most AERO whose owner has no stake open at the data end (so its AERO reconciles against claims + penalties exactly)."""
+    uns = (pos.filter(pl.col("closed") & pl.col("nft_burned") & (pl.col("staked_share") == 0) & (pl.col("lifetime_days") >= 1))
+           .sort("fee_usd", descending=True).head(1).with_columns(pl.lit("unstaked").alias("golden")))
+    done = per_user.filter(~pl.col("has_open_stake")).select(pl.col("user").alias("owner"), "aero_computed", "aero_onchain")
+    stk = (pos.filter(pl.col("closed") & (pl.col("nft_burned") | pl.col("collected_after_close").fill_null(False)) & (pl.col("staked_share") > 0.5)
+                      & (pl.col("aero_earned") > 0) & (pl.col("lifetime_days") >= 1))
+           .join(done, on="owner", how="inner").sort("aero_earned", descending=True).head(1).with_columns(pl.lit("staked").alias("golden")))
+    return [{k: r.get(k) for k in ["golden", *GOLDEN_COLS, "aero_computed", "aero_onchain"]}
+            for r in pl.concat([uns, stk], how="diagonal_relaxed").iter_rows(named=True)]
+
+
 def run() -> dict:
     t0 = time.time()
     OUT.mkdir(parents=True, exist_ok=True)
@@ -229,6 +248,8 @@ def run() -> dict:
                      "edge_lp_income_hl_1h": (summ["fees_to_lps_usd"] + rec_usd) / summ["picked_hl_1h_usd"] if summ.get("picked_hl_1h_usd") else None,
                      "edge_lp_income_basis": "fees kept by LPs + AERO received (earned − forfeited), valued at accrual"})
         summ_f.write_text(json.dumps(summ, indent=1, default=str))
+    golden = pick_golden(pos, per_user)
+    recon["golden"] = golden
     pos.write_parquet(OUT / "positions.parquet")
     seg.drop("a_lo", "a_hi", "k_start", "k_end", strict=False).write_parquet(OUT / "segments.parquet")
     att.write_parquet(OUT / "attribution.parquet")
