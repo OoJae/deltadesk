@@ -43,6 +43,7 @@ class Pool:
     dec1: int
     lp_fee_pips: int    # pool fee tier in pips (1e6 = 100%); v3: total fee (protocol cut comes out of it), v4: LP fee
     v3_fee_protocol_now: int = 0  # slot0.feeProtocol today; used for history only if no SetFeeProtocol events exist
+    chain: str = "robinhood"      # "robinhood" (4663) | "base" (8453): selects NPM / LP-tx sources in positions/
 
 
 POOLS = [
@@ -57,7 +58,7 @@ POOLS = [
 # staked/unstaked fee split (staked liquidity's fees go to the gauge, unstaked keeps 1 - unstakedFee) is applied
 # downstream (aero/). token0 = USDC (6), token1 = NVDAc (B20, 8 decimals).
 BASE_POOLS = [
-    Pool("NVDAc/USDC", "base_aero_nvda", "v3", "0x853f5f1b92b16714fe6cda67caad0856b83c7ab9", "NVDA", "USDC", False, 6, 8, 500),
+    Pool("NVDAc/USDC", "base_aero_nvda", "v3", "0x853f5f1b92b16714fe6cda67caad0856b83c7ab9", "NVDA", "USDC", False, 6, 8, 500, chain="base"),
 ]
 
 

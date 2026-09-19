@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import polars as pl
 
-from markout.pools import DATA, POOLS, Pool
+from markout.pools import DATA, POOLS, USD_QUOTES, Pool
 
 OUT = DATA / "study" / "m1" / "positions"
 RAW = DATA / "raw"
@@ -63,6 +63,21 @@ ORD_TX = 10**5
 Q96 = 2.0**96
 
 POOL_BY_KEY = {p.key: p for p in POOLS}
+
+
+@dataclass(frozen=True)
+class ChainCfg:
+    npm: str             # v3-style NonfungiblePositionManager
+    lp_txs: str          # raw source holding the NPM logs + txs of every LP tx (JOIN_ALL on the pool's LP events)
+    npm_transfers: str   # raw source holding the NPM Transfer logs
+
+
+CHAINS = {
+    "robinhood": ChainCfg(NPM, "lp_txs", "npm_transfers"),
+    # Aerodrome Slipstream NPM (equity pools). Transfers come from the LP txs themselves (mint → holder, gauge
+    # deposit / withdraw): a Transfer-topic scan of the NPM on Base is too slow; wallet-to-wallet NFT moves are missed.
+    "base": ChainCfg("0xe1f8cd9ac4e4a65f54f38a5cdafca44f6dd68b53", "base_aero_lp_txs", "base_aero_lp_txs"),
+}
 
 
 # ---------------------------------------------------------------------------------------------------------------- decoding
@@ -189,7 +204,7 @@ def mid_from_sqrtp(pool: Pool, sqrtp) -> np.ndarray:
 class UsdPricer:
     """USD per HUMAN token0 / token1 of a pool at a given ord (pool state after the last swap before it).
 
-    USDG = $1. Stocks: the pool's own mid. QQQ/SPY: SPY valued with the SPY/USDG pool mid at the same timestamp."""
+    USDG / USDC = $1. Stocks: the pool's own mid. QQQ/SPY: SPY valued with the SPY/USDG pool mid at the same timestamp."""
 
     def __init__(self, pool: Pool, path: pl.DataFrame, spy_path: pl.DataFrame | None = None):
         self.pool = pool
@@ -198,7 +213,7 @@ class UsdPricer:
         self.sqrtp = path["sqrtp"].to_numpy()
         self.tick = path["tick"].to_numpy()
         self.spy = None
-        if pool.quote != "USDG":
+        if pool.quote not in USD_QUOTES:
             spy_pool = POOL_BY_KEY["SPY/USDG"]
             spy_path = spy_path if spy_path is not None else price_path(spy_pool)
             self.spy = (spy_path["ts"].to_numpy(), mid_from_sqrtp(spy_pool, spy_path["sqrtp"].to_numpy()))
@@ -254,8 +269,10 @@ def _lifecycle_ids(keys: list[tuple], dls: list[int], prefix: str) -> tuple[list
 
 
 def reconstruct_v3(pool: Pool) -> PoolPositions:
+    cfg = CHAINS[pool.chain]
+    npm = cfg.npm
     plog = load_logs(pool.source, address=pool.pool_id, topic0=[T_V3_MINT, T_V3_BURN, T_V3_COLLECT])
-    nlog = load_logs("lp_txs", address=NPM, topic0=[T_NPM_INC, T_NPM_DEC, T_NPM_COLLECT])
+    nlog = load_logs(cfg.lp_txs, address=npm, topic0=[T_NPM_INC, T_NPM_DEC, T_NPM_COLLECT])
     allev = pl.concat([plog, nlog], how="diagonal_relaxed").sort("ord")
     cols = ["ord", "block", "tx_index", "log_index", "tx_hash", "ts", "address", "topic0", "topic1", "topic2", "topic3", "data"]
 
@@ -281,14 +298,14 @@ def reconstruct_v3(pool: Pool) -> PoolPositions:
             w = words(r["data"])
             if t0 == T_V3_MINT:
                 rec = {**base, "etype": "inc", "lower": lo, "upper": hi, "dL": w[1], "amount0": w[2], "amount1": w[3], "pool_owner": owner}
-                if owner == NPM:
+                if owner == npm:
                     n_npm_mint += 1
                     pend_mint = rec
                 else:
                     direct_keys.append((owner, lo, hi)); direct_idx.append(len(ev_rows)); ev_rows.append(rec)
             elif t0 == T_V3_BURN:
                 rec = {**base, "etype": "dec", "lower": lo, "upper": hi, "dL": w[0], "amount0": w[1], "amount1": w[2], "pool_owner": owner}
-                if owner == NPM:
+                if owner == npm:
                     if w[0] > 0:
                         n_npm_burn += 1
                         pend_burn = rec
@@ -298,7 +315,7 @@ def reconstruct_v3(pool: Pool) -> PoolPositions:
                     direct_keys.append((owner, lo, hi)); direct_idx.append(len(ev_rows)); ev_rows.append(rec)
                 else:
                     col_rows.append({**base, "kind": "poke", "key": (owner, lo, hi), "amount0": 0, "amount1": 0})
-            elif t0 == T_V3_COLLECT and owner != NPM:
+            elif t0 == T_V3_COLLECT and owner != npm:
                 col_rows.append({**base, "kind": "collect", "key": (owner, lo, hi), "amount0": w[1], "amount1": w[2]})
         else:  # NPM
             tid = topic_int(r["topic1"])
@@ -325,7 +342,7 @@ def reconstruct_v3(pool: Pool) -> PoolPositions:
         if "token_id" in rec:
             rec["pos_id"] = f"{pool.key}:npm:{rec['token_id']}"
             rec["kind"] = "v3_npm"
-            rec["owner_key"] = NPM
+            rec["owner_key"] = npm
     lids, _ = _lifecycle_ids(direct_keys, [(1 if ev_rows[i]["etype"] == "inc" else -1) * ev_rows[i]["dL"] for i in direct_idx], f"{pool.key}:v3")
     key_life: dict[tuple, list[tuple[int, str]]] = {}
     for i, lid, k in zip(direct_idx, lids, direct_keys):
@@ -354,7 +371,7 @@ def reconstruct_v3(pool: Pool) -> PoolPositions:
     events = _events_frame(pool, ev_rows)
     collects = pl.DataFrame(realized, schema={"ord": pl.Int64, "block": pl.Int64, "tx_hash": pl.Utf8, "ts": pl.Int64, "pos_id": pl.Utf8,
                                               "kind": pl.Utf8, "amount0": pl.Float64, "amount1": pl.Float64}, orient="row")
-    transfers = _nft_transfers("npm_transfers", NPM, pool, {tid: f"{pool.key}:npm:{tid}" for tid in token_ticks})
+    transfers = _nft_transfers(cfg.npm_transfers, npm, pool, {tid: f"{pool.key}:npm:{tid}" for tid in token_ticks})
     diag = {"npm_pool_mints": n_npm_mint, "npm_mints_linked": linked_mint, "npm_pool_burns_nonzero": n_npm_burn,
             "npm_burns_linked": linked_burn, "npm_poke_burns": n_pokes, "npm_tokenids": len(token_ticks),
             "direct_collects_without_position": orphan_direct}
@@ -456,7 +473,7 @@ def _nft_transfers(source: str, address: str, pool: Pool, ids: dict[int, str]) -
 
 
 def _finish(pool: Pool, events: pl.DataFrame, collects: pl.DataFrame, transfers: pl.DataFrame, touches: pl.DataFrame, diag: dict) -> PoolPositions:
-    txs = load_txs("lp_txs").select("tx_hash", "from")
+    txs = load_txs(CHAINS[pool.chain].lp_txs).select("tx_hash", "from")
     op = (touches.join(txs, on="tx_hash", how="left").group_by("pos_id", "from").len()
           .sort(["pos_id", "len", "from"], descending=[False, True, False]).group_by("pos_id").first()
           .select("pos_id", pl.col("from").alias("operator")))

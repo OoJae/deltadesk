@@ -44,12 +44,15 @@ import polars as pl
 
 from markout.pools import DATA, POOLS, Pool
 from markout.study import regime_expr
-from positions.reconstruct import (OUT, POOL_BY_KEY, exact_swap_liquidity, T_V3_FLASH, T_V3_SET_FEE_PROTOCOL, PoolPositions, UsdPricer,
-                                   amounts_for_liquidity, load_logs, load_txs, ord_expr, price_path, reconstruct, segments,
+from positions.reconstruct import (CHAINS, OUT, POOL_BY_KEY, exact_swap_liquidity, T_V3_FLASH, T_V3_SET_FEE_PROTOCOL, PoolPositions,
+                                   UsdPricer, amounts_for_liquidity, load_logs, load_txs, ord_expr, price_path, reconstruct, segments,
                                    tick_to_sqrtp, words)
 
 SWAPS = DATA / "study" / "m0" / "swaps.parquet"
 HL_PATH = DATA / "study" / "m1" / "hl_ref" / "hl_markouts.parquet"
+# per chain: (M0-shaped swap table, HL markouts). Base swaps are built by aero.study.
+SWAP_TABLES = {"robinhood": (SWAPS, HL_PATH),
+               "base": (DATA / "study" / "m1" / "aero" / "swaps.parquet", DATA / "study" / "m1" / "aero" / "hl_markouts.parquet")}
 ETH_USD = 4000.0  # FLAGGED CONSTANT: no ETH/USD source exists under data/ (HL tape covers xyz stock perps only)
 REGIMES = ["REGULAR", "EXTENDED", "OVERNIGHT", "WEEKEND_DARK", "HOLIDAY"]
 METRICS = ["fee0", "fee1", "fee_usd", "vol_usd", "picked_1m", "picked_5m", "picked_1h", "fee_usd_v1h",
@@ -65,11 +68,12 @@ def load_swaps(pool: Pool, path: pl.DataFrame) -> pl.DataFrame:
     """swaps.parquet rows of one pool + raw √P before/after + HL markouts + per-token LP fee (raw units)."""
     cols = ["block", "tx_index", "log_index", "ts", "s", "q", "p_exec", "fee_q", "fee_usd", "vol_usd", "liquidity",
             "tick_before", "tick", "regime", "picked_usd_1m", "picked_usd_5m", "picked_usd_1h", "valid_1m", "valid_5m", "valid_1h"]
-    sw = pl.scan_parquet(SWAPS).filter(pl.col("pool") == pool.key).select(cols).with_columns(ord_expr()).collect()
+    swaps_path, hl_path = SWAP_TABLES[pool.chain]
+    sw = pl.scan_parquet(swaps_path).filter(pl.col("pool") == pool.key).select(cols).with_columns(ord_expr()).collect()
     pth = path.select("ord", pl.col("sqrtp").shift(1).alias("sqrtp_before"), pl.col("sqrtp").alias("sqrtp_after"))
     sw = sw.join(pth, on="ord", how="left")
-    if HL_PATH.exists():
-        hl = (pl.scan_parquet(HL_PATH).filter(pl.col("pool") == pool.key)
+    if hl_path.exists():
+        hl = (pl.scan_parquet(hl_path).filter(pl.col("pool") == pool.key)
               .select("block", "tx_index", "log_index", "picked_hl_1m", "picked_hl_5m", "picked_hl_1h", "valid_hl_1m", "valid_hl_5m", "valid_hl_1h")
               .collect())
         sw = sw.join(hl, on=["block", "tx_index", "log_index"], how="left")
@@ -355,7 +359,7 @@ def run_pool(pool: Pool, spy_path: pl.DataFrame | None) -> dict:
         "liq_median_rel_err": float(np.median(rel)), "liq_fee_weighted_mean_rel_err": float((rel * fee_w).sum() / fee_w.sum()) if fee_w.sum() else None,
         "liq_tick_before_vs_event_noncrossing_match_1e-6": float((rel_b[~cross] < 1e-6).mean()) if (~cross).any() else None,
         "liq_tick_before_vs_event_crossing_match_1e-6": float((rel_b[cross] < 1e-6).mean()) if cross.any() else None,
-        "hl_markouts": HL_PATH.exists(),
+        "hl_markouts": SWAP_TABLES[pool.chain][1].exists(),
     }
     # final reconstructed liquidity at the last tick must equal the last Swap event's liquidity
     last_ord = int(path["ord"].max())
@@ -484,8 +488,8 @@ def notional_stats(pool: Pool, seg: pl.DataFrame, pricer: UsdPricer, end_ts: flo
 
 
 # ------------------------------------------------------------------------------------------------------------- all pools
-def gas_by_position(touches: pl.DataFrame) -> pl.DataFrame:
-    txs = load_txs("lp_txs").select("tx_hash", (pl.col("gas_used").cast(pl.Float64) * pl.col("gas_price_wei") / 1e18).alias("gas_eth"))
+def gas_by_position(touches: pl.DataFrame, source: str = "lp_txs") -> pl.DataFrame:
+    txs = load_txs(source).select("tx_hash", (pl.col("gas_used").cast(pl.Float64) * pl.col("gas_price_wei") / 1e18).alias("gas_eth"))
     t = touches.unique().with_columns(pl.len().over("tx_hash").alias("_n")).join(txs, on="tx_hash", how="left")
     return t.group_by("pos_id").agg((pl.col("gas_eth") / pl.col("_n")).sum().alias("gas_eth"), pl.col("tx_hash").n_unique().alias("n_txs"),
                                     pl.col("gas_eth").is_null().sum().alias("txs_missing_gas"))
@@ -531,7 +535,7 @@ def owners_table(pos: pl.DataFrame, seg: pl.DataFrame) -> pl.DataFrame:
              .group_by("owner").agg((pl.col("b") - pl.col("a")).sum().alias("union_seconds")))
     o = pos.group_by("owner").agg(
         pl.len().alias("n_positions"), pl.col("pool").unique().sort().str.join(",").alias("pools"),
-        pl.col("kind").mode().first().alias("main_kind"), pl.col("operator").mode().first().alias("main_operator"),
+        pl.col("kind").mode().sort().first().alias("main_kind"), pl.col("operator").mode().sort().first().alias("main_operator"),
         pl.col("notional_seconds").sum(), pl.col("deposits_usd").sum(), pl.col("withdrawals_usd").sum(), pl.col("end_value_usd").sum(),
         pl.col("fee_usd").sum(), pl.col("fee_usd_v1h").sum(), pl.col("fee_usd_hlv1h").sum(), pl.col("picked_1h").sum(), pl.col("picked_hl_1h").sum(),
         pl.col("price_pnl_usd").sum(), pl.col("il_usd").sum(), pl.col("gas_usd").sum(), pl.col("net_usd").sum(), pl.col("vs_hodl_usd").sum(),
