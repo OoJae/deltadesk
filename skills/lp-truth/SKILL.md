@@ -14,7 +14,7 @@ one of those moments, and afterwards exactly where their P&L came from.
 
 ## Endpoints (x402, paid from the user's Bankr wallet in USDC on Base)
 
-Base URL: `https://x402.bankr.bot/0x0000000000000000000000000000000000000000/` (the DeltaDesk wallet; see `scripts/lib/endpoints.mjs`).
+Base URL: `https://x402.bankr.bot/0xd8d5b9389721258bcdfa7ac1306af6330e5634cd/` (the DeltaDesk wallet; see `scripts/lib/endpoints.mjs`).
 
 | Service | Call | Price | Returns |
 |---|---|---|---|
