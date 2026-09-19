@@ -18,7 +18,7 @@ Handles:
 - Optionally add `@Uniswap` to post 4 (256 characters then), and write `@igoryuzo` in place of "Igor" in post 1, a
   courtesy tag for the quote (276 characters then; appending the tag instead would go over 280).
 
-## 1/9
+## 1/9 (271 characters)
 
 ```
 Igor asked: "If I made $80 in fees but lost $50 to informed flow, that would be good to know."
@@ -30,9 +30,10 @@ NVDA/USDG: LPs earned $367.3k in fees. Informed flow took back $289.1k.
 Meet DeltaDesk 🧵
 ```
 
-Media: `x-images/04-study-account.png` (the account: $367.3k fees, −$289.1k picked off, $78.2k left)
+Media: `x-images/04-study-account.png` — the study's account: $367.3k in fees, −$289.1k picked off, $78.2k left with LPs. This image is the thesis.
 
-## 2/9 (259 characters as drafted)
+
+## 2/9 (259 characters)
 
 ```
 Where it goes:
@@ -44,7 +45,9 @@ Where it goes:
 Marked against Hyperliquid's 24/7 price.
 ```
 
-## 3/9 (212 characters as drafted)
+Media: `x-images/02-act-gap.png` — act N° 03 of the weekend replay: the gap opens, a $1k in-range LP paid $4.24 and earned $3.32.
+
+## 3/9 (212 characters)
 
 ```
 Who takes it:
@@ -54,7 +57,9 @@ Three operators account for 98.6% of NVDA LPs' net losses to informed flow.
 Hyperliquid-arb bots pay 37% of fees and take 66% of the positive value picked off. Retail and aggregator flow pays LPs.
 ```
 
-## 4/9 (247 characters as drafted)
+Media: `x-images/06-study-scroll.png` — the Flow X-ray: who takes LP money, by cluster.
+
+## 4/9 (247 characters)
 
 ```
 Paste any wallet into the tearsheet: Uniswap on Robinhood Chain or Aerodrome on Base, staked or not.
@@ -64,9 +69,10 @@ Fees vs informed flow vs IL vs gas vs net, per $1k, reconciled to on-chain colle
 https://web-production-10951.up.railway.app/tearsheet
 ```
 
-Media: `x-images/07-league.png` (the LP League; or a tearsheet you like, address cropped)
+Media: `x-images/07-league.png` — the LP League, about 1,000 managers ranked against simply holding.
 
-## 5/9 (238 characters as drafted)
+
+## 5/9 (238 characters)
 
 ```
 On Aerodrome's NVDAc/USDC pool, swap fees cover only 0.97x of what informed flow takes. 82% of fees go to veAERO voters.
@@ -74,13 +80,17 @@ On Aerodrome's NVDAc/USDC pool, swap fees cover only 0.97x of what informed flow
 AERO emissions are what make it pay: 1.22x with AERO. AERO attributed to positions equals AERO distributed, exactly.
 ```
 
-## 6/9 (211 characters as drafted)
+Media: none (the Aerodrome numbers read fine as text). Optional: a Base tearsheet with the address cropped.
+
+## 6/9 (211 characters)
 
 ```
 For agents: 5 x402 endpoints on @bankrbot (safe-to-lp at $0.005, tearsheet $0.05), the lp-truth skill, and `ledger` PRs proposed for Bankr's hood-stock-lp and aero-stock-lp skills, to bring the answer into chat.
 ```
 
-## 7/9 (271 characters as drafted)
+Media: none, or `x-images/11-brand.png`. The x402 terms are better shown in the video than as a screenshot.
+
+## 7/9 (271 characters)
 
 ```
 The desk: a lane contract on Robinhood Chain that holds your Uniswap position.
@@ -88,9 +98,10 @@ The desk: a lane contract on Robinhood Chain that holds your Uniswap position.
 An agent runs it through a separate @dynamic_xyz delegated wallet, never your owner wallet. The contract can only pay you, fences placements vs Chainlink, and refuses to add risk on weekends.
 ```
 
-Media: `x-images/08-lane.png` (the live lane: Vault, Operator, Guardian, $50.77, risk-adding closed)
+Media: `x-images/08-lane.png` — the live lane: Vault, Operator, Guardian, $50.77 Chainlink-valued, risk-adding closed. Alternate: `09-console.png`.
 
-## 8/9
+
+## 8/9 (244 characters)
 
 ```
 Today, a Saturday, the agent's first on-chain decision was to stay out, and to say so on-chain:
@@ -102,7 +113,9 @@ A staged malicious transfer from its wallet was refused by @dynamic_xyz's co-sig
 First live mint Monday, posted here.
 ```
 
-## 9/9 (269 characters as drafted)
+Media: `x-images/10-signal-tx.png` — Blockscout: the Operator called `signal` on the lane, success. Alternates: `12-laneaction-log.png` (the decoded LaneAction), `03-act-lane-aside.png`.
+
+## 9/9 (269 characters)
 
 ```
 Honest notes:
@@ -113,6 +126,8 @@ Demo: https://youtu.be/pjpZgsKzxQY
 Code: https://github.com/OoJae/deltadesk
 Built for Runtime Agent Week
 ```
+
+Media: `x-images/01-hero.png` — the landing, as the closing image.
 
 ## Images (in `docs/notes/x-images/`, captured from the live site)
 
