@@ -35,8 +35,10 @@ STEPS = [
     ("hl_ref", ["markout.hl_ref"], 0),
     ("positions", ["positions.attribute"], 3600),
     ("league", ["league.build"], 3600),
-    ("hyper_sync_heavy", ["indexer.hs_backfill", "swap_txs", "base_aero_nvda", "base_aero_gauge", "base_npm_transfers",
-                          "base_aero_usdc", "base_aero_lp_txs", "base_aero_swap_txs"], 1800),
+    # Base first (small ranges), then the long Robinhood swap-sender backfill. base_npm_transfers is left out: a
+    # Transfer-topic scan on Base is slow, and owners come from the mint tx (base_aero_lp_txs) plus gauge events.
+    ("hyper_sync_heavy", ["indexer.hs_backfill", "base_aero_nvda", "base_aero_gauge", "base_aero_usdc", "base_aero_lp_txs",
+                          "base_aero_swap_txs", "swap_txs"], 1800),
     ("flow", ["flow.xray"], 3600),
     ("backtest", ["backtest.gap_exclusion"], 6 * 3600),
 ]

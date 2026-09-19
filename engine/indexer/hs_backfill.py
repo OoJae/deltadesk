@@ -228,17 +228,27 @@ async def fetch_range(client: hypersync.HypersyncClient, name: str, spec: Spec, 
 
 async def main():
     wanted = sys.argv[1:] or list(SPECS)
-    clients, heights = {}, {}
+    clients, heights, failed = {}, {}, []
     for name in wanted:
-        chain = SPECS[name].chain
-        if chain not in clients:
-            # The token is rate limited (30 req/min) and may be shared (server + laptop): back off past the 60 s window
-            # instead of burning retries on 429s the client could not predict.
-            clients[chain] = hypersync.HypersyncClient(ClientConfig(url=URLS[chain], api_token=token(), http_req_timeout_millis=120_000,
-                                                                    max_num_retries=12, retry_ceiling_ms=65_000))
-            heights[chain] = await clients[chain].get_height()
-            print(f"hypersync {chain} height {heights[chain]}", flush=True)
-        await fetch(clients[chain], name, SPECS[name], heights[chain])
+        try:
+            await _one(name, clients, heights)
+        except Exception as e:  # one stuck source must not block the others; the pipeline still sees a failure
+            print(f"{name}: FAILED {type(e).__name__}: {str(e)[:300]}", flush=True)
+            failed.append(name)
+    if failed:
+        raise SystemExit(f"failed sources: {', '.join(failed)}")
+
+
+async def _one(name: str, clients: dict, heights: dict) -> None:
+    chain = SPECS[name].chain
+    if chain not in clients:
+        # The token is rate limited (30 req/min) and may be shared (server + laptop): back off past the 60 s window
+        # instead of burning retries on 429s the client could not predict.
+        clients[chain] = hypersync.HypersyncClient(ClientConfig(url=URLS[chain], api_token=token(), http_req_timeout_millis=120_000,
+                                                                max_num_retries=12, retry_ceiling_ms=65_000))
+        heights[chain] = await clients[chain].get_height()
+        print(f"hypersync {chain} height {heights[chain]}", flush=True)
+    await fetch(clients[chain], name, SPECS[name], heights[chain])
 
 
 if __name__ == "__main__":
