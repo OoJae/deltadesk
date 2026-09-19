@@ -24,6 +24,8 @@
 
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { secp256k1 } from "@noble/curves/secp256k1";
+import { publicKeyToAddress } from "viem/accounts";
 import { z } from "zod";
 import { deskLaneFactoryAbi } from "../executor/abi/DeskLaneFactory.js";
 import { readContract } from "../executor/chain.js";
@@ -207,7 +209,37 @@ function walletAddressOf(d: z.infer<typeof CreatedSchema>): Address | null {
   for (const c of [d.accountAddress, d.walletAddress, d.address, d.publicKey]) {
     if (c !== undefined && ADDRESS_RE.test(c)) return c.toLowerCase() as Address;
   }
-  return null;
+  // Dynamic's documented wallet.delegation.created carries only { walletId, chain, publicKey, userId,
+  // encryptedDelegatedShare, encryptedWalletApiKey }: derive the EVM address from the public key.
+  return d.publicKey === undefined ? null : evmAddressFromPublicKey(d.publicKey);
+}
+
+/**
+ * EVM address of a secp256k1 public key given as hex (with or without 0x) or base64: 65-byte
+ * uncompressed (0x04…), 64-byte raw X‖Y, or 33-byte compressed (0x02/0x03…, decompressed on the curve).
+ * Anything else, or a point not on the curve: null.
+ */
+export function evmAddressFromPublicKey(publicKey: string): Address | null {
+  const t = publicKey.trim();
+  let bytes: Uint8Array | null = null;
+  const hex = t.replace(/^0x/i, "");
+  if (/^[0-9a-fA-F]+$/.test(hex) && hex.length % 2 === 0) bytes = Buffer.from(hex, "hex");
+  else if (/^[A-Za-z0-9+/_-]+={0,2}$/.test(t)) bytes = Buffer.from(t, "base64");
+  if (bytes === null) return null;
+  try {
+    let uncompressed: Uint8Array;
+    if (bytes.length === 65 && bytes[0] === 0x04) uncompressed = bytes;
+    else if (bytes.length === 64) uncompressed = Uint8Array.from([0x04, ...bytes]);
+    else if (bytes.length === 33 && (bytes[0] === 0x02 || bytes[0] === 0x03))
+      uncompressed = secp256k1.ProjectivePoint.fromHex(bytes).toRawBytes(false);
+    else return null;
+    secp256k1.ProjectivePoint.fromHex(uncompressed).assertValidity();
+    return publicKeyToAddress(
+      `0x${Buffer.from(uncompressed).toString("hex")}`,
+    ).toLowerCase() as Address;
+  } catch {
+    return null;
+  }
 }
 
 export function createDynamicWebhookHandler(deps: WebhookDeps): WebhookHandler {
@@ -486,7 +518,15 @@ export function createDynamicWebhookHandler(deps: WebhookDeps): WebhookHandler {
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         finish("failed", message);
-        if (err instanceof PayloadError) return { status: 400, body: { error: message } };
+        if (err instanceof PayloadError) {
+          const keys =
+            env.data !== null && typeof env.data === "object" ? Object.keys(env.data).sort() : [];
+          logger.warn(
+            { eventId: env.eventId, eventName: env.eventName, dataKeys: keys, error: message },
+            "webhook payload rejected",
+          );
+          return { status: 400, body: { error: message } };
+        }
         logger.error(
           { eventId: env.eventId, eventName: env.eventName, error: message },
           "webhook processing failed",

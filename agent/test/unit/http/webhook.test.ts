@@ -1,9 +1,12 @@
 import { constants, createDecipheriv, privateDecrypt, randomBytes } from "node:crypto";
+import { secp256k1 } from "@noble/curves/secp256k1";
 import { decodeFunctionData, encodeFunctionResult } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 import { describe, expect, it } from "vitest";
 import { deskLaneFactoryAbi } from "../../../src/executor/abi/DeskLaneFactory.js";
 import {
   createDynamicWebhookHandler,
+  evmAddressFromPublicKey,
   factoryLaneOwnerProbe,
   signDynamicPayload,
   verifyDynamicSignature,
@@ -461,5 +464,42 @@ describe("a lane OWNER is never stored, registered desk or not", () => {
     expect(await probe("0x7777777777777777777777777777777777777777")).toBe(false);
     expect(calls.every((c) => c.to.toLowerCase() === FACTORY && c.block === 7n)).toBe(true);
     expect(calls.filter((c) => c.fn === "listed")).toHaveLength(2);
+  });
+});
+
+describe("Dynamic's documented payload carries a publicKey, not an address", () => {
+  // ANVIL_KEY_0's account is OPERATOR_ADDR (the lane's operator in deskRow()).
+  const account = privateKeyToAccount(
+    "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+  );
+  const uncompressed = account.publicKey; // 0x04 ‖ X ‖ Y
+  const point = secp256k1.ProjectivePoint.fromHex(uncompressed.slice(2));
+  const compressed = `0x${Buffer.from(point.toRawBytes(true)).toString("hex")}`;
+
+  it("derives the EVM address from uncompressed, raw X‖Y, compressed and base64 public keys", () => {
+    expect(account.address.toLowerCase()).toBe(OPERATOR_ADDR);
+    expect(evmAddressFromPublicKey(uncompressed)).toBe(OPERATOR_ADDR);
+    expect(evmAddressFromPublicKey(uncompressed.slice(2))).toBe(OPERATOR_ADDR);
+    expect(evmAddressFromPublicKey(`0x${uncompressed.slice(4)}`)).toBe(OPERATOR_ADDR);
+    expect(evmAddressFromPublicKey(compressed)).toBe(OPERATOR_ADDR);
+    expect(
+      evmAddressFromPublicKey(Buffer.from(uncompressed.slice(2), "hex").toString("base64")),
+    ).toBe(OPERATOR_ADDR);
+  });
+
+  it("refuses anything that is not a point on the curve", () => {
+    expect(evmAddressFromPublicKey("0x04" + "00".repeat(64))).toBeNull();
+    expect(evmAddressFromPublicKey("0x02" + "ff".repeat(32))).toBeNull();
+    expect(evmAddressFromPublicKey("0x1234")).toBeNull();
+    expect(evmAddressFromPublicKey("not a key!")).toBeNull();
+  });
+
+  it("wallet.delegation.created with only { walletId, chain, publicKey, userId, encrypted… } binds to the lane", async () => {
+    const s = setup();
+    s.db.insertDesk(deskRow());
+    const r = await s.post(createdEvent("evt-pubkey-1", { publicKey: compressed }));
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ ok: true, address: OPERATOR_ADDR, lane: LANE });
+    expect(s.db.getDelegation("wallet-op-1")).toMatchObject({ accountAddress: OPERATOR_ADDR });
   });
 });
