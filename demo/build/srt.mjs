@@ -3,8 +3,17 @@
 //   out/deltadesk-demo.srt   out/cues.json
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { OUT } from "./beats.mjs";
+import { DEMO, OUT } from "./beats.mjs";
 import { LEAD, TAIL } from "./lib.mjs";
+
+// When a hand-recorded voiceover is aligned word by word (demo/voice/align.json, written by the aligner),
+// cues are timed from the words actually spoken instead of by character share.
+let VOICE_ALIGN = {};
+try {
+  VOICE_ALIGN = JSON.parse(readFileSync(join(DEMO, "voice", "align.json"), "utf8"));
+} catch {
+  VOICE_ALIGN = {};
+}
 
 const MAX = 74; // chars per cue (at most two lines)
 const MAX_TAIL = 84; // a trailing fragment under 12 chars may stretch its cue this far rather than flash on its own
@@ -59,6 +68,33 @@ for (const b of tl.beats) {
     const j = i === 0 ? 1 : i - 1;
     const [a, z] = [Math.min(i, j), Math.max(i, j)];
     parts.splice(a, 2, `${parts[a]} ${parts[z]}`);
+  }
+  const aligned = !tl.full && VOICE_ALIGN[b.id]?.words?.length ? VOICE_ALIGN[b.id].words : null;
+  if (aligned) {
+    // Walk the beat's words: each cue starts on its first spoken word and ends on its last.
+    const at = new Map(aligned.map((w) => [w.wi, w]));
+    let wi = 0;
+    for (const p of parts) {
+      const n = p.split(/\s+/).filter(Boolean).length;
+      let first = null;
+      let last = null;
+      for (let k = wi; k < wi + n; k++) {
+        const w = at.get(k);
+        if (!w) continue;
+        first ??= w;
+        last = w;
+      }
+      wi += n;
+      const start = first ? t0 + first.s : cues.length ? cues[cues.length - 1].end : t0;
+      const end = last ? t0 + last.e + 0.12 : start + 1;
+      cues.push({
+        beat: b.id,
+        start: +Math.max(b.start, start - 0.12).toFixed(3),
+        end: +Math.min(end, b.start + b.duration - 0.05).toFixed(3),
+        text: p,
+      });
+    }
+    continue;
   }
   const total = parts.reduce((a, p) => a + p.length, 0);
   let t = t0;
