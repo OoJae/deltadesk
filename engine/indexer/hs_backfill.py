@@ -103,14 +103,14 @@ BASE_START = 49_200_000  # just before the NVDAc pool's first log (49,273,475, A
 
 SPECS["base_aero_nvda"] = Spec([([AERO_NVDA_POOL], [])], chain="8453", start_block=BASE_START)
 SPECS["base_aero_gauge"] = Spec([([AERO_NVDA_GAUGE], [])], chain="8453", start_block=BASE_START)
-# Base LP data without JOIN_ALL (on Base a JOIN_ALL / topic-filtered scan pulls every matching log chain-wide and crawls):
-#   base_npm       every log of the Aerodrome equity NPM (Increase/Decrease/Collect/Transfer for all its pools; linked to
-#                  our pool's Mint/Burn by tx locally, Transfers by tokenId, so wallet-to-wallet NFT moves are included)
-#   base_aero_txs  the transactions behind every pool and gauge log (swap senders, LP / staking tx senders and gas)
-SPECS["base_npm"] = Spec([([AERO_NPM_EQUITY], [])], chain="8453", start_block=BASE_START, chunk_blocks=250_000)
-SPECS["base_aero_txs"] = Spec(
-    selections=[([AERO_NVDA_POOL, AERO_NVDA_GAUGE], [])], logs=False, txs=True,
-    log_fields=[LogField.BLOCK_NUMBER, LogField.TRANSACTION_HASH], chain="8453", start_block=BASE_START, chunk_blocks=250_000,
+# Base LP data: every log (pool, gauge, NPM) and the tx of each tx holding one of our pool's Mint/Burn/Collect or a gauge
+# Deposit/Withdraw. JOIN_ALL is slow on Base (~10 min per 250k-block chunk) but completes; an address-only scan of the
+# shared equity NPM does not (a single chunk exceeds 15 min). NPM Transfers come from these txs too (mint, burn, gauge
+# deposit/withdraw), so wallet-to-wallet NFT moves outside LP txs are not seen.
+SPECS["base_aero_lp_txs"] = Spec(
+    selections=[([AERO_NVDA_POOL], [[T_V3_MINT, T_V3_BURN, T_V3_COLLECT]]), ([AERO_NVDA_GAUGE], [[T_GAUGE_DEPOSIT, T_GAUGE_WITHDRAW]])],
+    join=JoinMode.JOIN_ALL, txs=True, keep_log_addresses=[AERO_NVDA_POOL, AERO_NVDA_GAUGE, AERO_NPM_EQUITY],
+    chain="8453", start_block=BASE_START, chunk_blocks=250_000,
 )
 SPECS["base_aero_usdc"] = Spec([([AERO_USDC_POOL], [[T_V3_SWAP]])], chain="8453", start_block=BASE_START, chunk_blocks=250_000)
 

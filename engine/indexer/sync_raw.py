@@ -3,7 +3,7 @@
 The HyperSync token is rate limited and the server's pipeline usually holds its whole budget, so a dev machine pulls the
 server's files instead of re-fetching (GET /admin/raw/{source}[/{file}], premium key from .env).
 
-    uv run python -m indexer.sync_raw base_npm base_aero_txs            # download files missing locally
+    uv run python -m indexer.sync_raw base_aero_lp_txs                  # download files missing locally
     uv run python -m indexer.sync_raw base_aero_nvda --mirror           # also delete local files the server doesn't have
 
 Files are block ranges (hs_<from>_<to>.parquet, tx_<from>_<to>.parquet); local and server files with different

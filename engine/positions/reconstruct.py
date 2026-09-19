@@ -76,11 +76,11 @@ class ChainCfg:
 
 CHAINS = {
     "robinhood": ChainCfg(NPM, "lp_txs", "lp_txs", "npm_transfers"),
-    # Aerodrome Slipstream NPM (equity pools): all of its logs (base_npm; other pools' events never link to our pool's
-    # Mint/Burn and Transfers are filtered by tokenId), txs of every pool / gauge log (base_aero_txs).
+    # Aerodrome Slipstream NPM (equity pools): NPM logs, Transfers and txs all from the pool's LP / staking txs
+    # (base_aero_lp_txs, JOIN_ALL), so NFT moves outside LP txs are not seen.
     # For a STAKED tokenId the NPM mints / burns / collects with the gauge as the pool-level owner (NPM source:
     # addLiquidity recipient = gauge, burn/collect(..., gauge)), so gauge-owned pool events are NPM-managed too.
-    "base": ChainCfg("0xe1f8cd9ac4e4a65f54f38a5cdafca44f6dd68b53", "base_npm", "base_aero_txs", "base_npm",
+    "base": ChainCfg("0xe1f8cd9ac4e4a65f54f38a5cdafca44f6dd68b53", "base_aero_lp_txs", "base_aero_lp_txs", "base_aero_lp_txs",
                      npm_pool_owners=("0x30d1e5af5ce39863e6f69a1f73ffb0e1ac9771a8",)),
 }
 
