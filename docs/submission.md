@@ -12,13 +12,13 @@ Fill every `{{…}}` placeholder before pasting. [`docs/m2-desk.md`](m2-desk.md)
 |---|---|---|
 | **Project name** | 120 | `DeltaDesk` |
 | **What does it do?** | 2,000 | the text in [What does it do?](#what-does-it-do-1982-characters) below |
-| **Your name** | 120 | {{CONTACT_NAME}} |
-| **Contact email** | 254 | {{CONTACT_EMAIL}} |
-| **Your X handle (Twitter)** | 15 chars + @ | {{X_HANDLE}}, your personal handle, e.g. `@yourname` |
-| **Other team members** | 1,000 | {{TEAM_MEMBERS}}, names and X handles, or leave blank |
+| **Your name** | 120 | OoJae |
+| **Contact email** | 254 | captainjoe550@gmail.com |
+| **Your X handle (Twitter)** | 15 chars + @ | @_OoJae, your personal handle, e.g. `@yourname` |
+| **Other team members** | 1,000 | @_OoJae (solo), names and X handles, or leave blank |
 | **Project link** | URL | `https://web-production-10951.up.railway.app` |
 | **Demo plans** | choice | **Recorded demo only (online submission)** |
-| **Repository link** | URL | {{GITHUB_URL}} (it must be public; the Uniswap track requires it) |
+| **Repository link** | URL | https://github.com/OoJae/deltadesk (it must be public; the Uniswap track requires it) |
 | **Demo video link** | URL | {{DEMO_VIDEO_URL}} (required for a recorded submission) |
 | **Project post on X (Twitter)** | a status URL | {{X_POST_URL}}, the first post of [notes/x-thread.md](notes/x-thread.md). A profile link is rejected. |
 | **Pitch deck link** | URL | optional; leave blank, or {{DECK_URL}} |
@@ -69,9 +69,9 @@ The form has no Bankr-specific field. These are the points to cover in the video
 
 ### Uniswap
 
-1. ☐ Make the repo public: {{GITHUB_URL}}. The README code pointers are in the "Code pointers" section of
+1. ☐ Make the repo public: https://github.com/OoJae/deltadesk. The README code pointers are in the "Code pointers" section of
    `README.md`.
-2. ☐ `FEEDBACK.md` is at the repo root: {{GITHUB_URL}}/blob/main/FEEDBACK.md.
+2. ☐ `FEEDBACK.md` is at the repo root: https://github.com/OoJae/deltadesk/blob/main/FEEDBACK.md.
 3. ☐ **Fill in the Uniswap Developer Feedback Form**, https://developers.uniswap.org/hackathon-feedback, and include
    the FEEDBACK.md link. Uniswap audits submissions that skip it.
 4. ☐ Select **Uniswap** in the Runtime form.

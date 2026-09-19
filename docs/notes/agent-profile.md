@@ -25,9 +25,9 @@ Chain isn't accepted, ask Bankr before creating the profile.
 | `tokenChainId` | | {{DESK_TOKEN_CHAIN}} (see the note above) |
 | `tokenSymbol` | ≤ 20 | `DESK` |
 | `tokenName` | ≤ 100 | `DeltaDesk` |
-| `twitterUsername` | ≤ 50 | {{PROJECT_X_HANDLE}} |
+| `twitterUsername` | ≤ 50 | @_OoJae |
 | `profileImageUrl` | URL | {{PROFILE_IMAGE_URL}} (optional; it is taken from X when that account is linked) |
-| `teamMembers` | ≤ 20 | {{TEAM_MEMBERS}} (name, role, links) |
+| `teamMembers` | ≤ 20 | @_OoJae (solo) (name, role, links) |
 
 ### description (982 characters)
 

@@ -117,7 +117,7 @@ The data comes from DeltaDesk's open study:
 - AERO attributed to positions equals AERO distributed, exactly. For the 467 wallets with nothing still staked,
   computed AERO matches on-chain claims plus penalties within 4e-8.
 
-Web: https://web-production-10951.up.railway.app · Repo: {{GITHUB_URL}}
+Web: https://web-production-10951.up.railway.app · Repo: https://github.com/OoJae/deltadesk
 
 First settled call (safe-to-lp, $0.005 USDC; a self-test from the DeltaDesk wallet, so payer and payee are the same):
 https://basescan.org/tx/0x309ddc0cbc51eccddf649fa001a25ecdc049179e402bc6dad91e798c8c8e6708
@@ -195,7 +195,7 @@ NVDA #286074 closed: fees +$3,210.01, informed flow −$1,069.15 (edge 3.00), vs
   - `selftest.mjs`: 60/60; `--live`: 124/124.
 
 Credit: @igoryuzo's `hood-stock-lp`. The ledger is built on DeltaDesk's LP truth layer
-(https://web-production-10951.up.railway.app, {{GITHUB_URL}}). Informational analytics, not investment advice.
+(https://web-production-10951.up.railway.app, https://github.com/OoJae/deltadesk). Informational analytics, not investment advice.
 ````
 
 ---
@@ -261,5 +261,5 @@ received and the share that went to voters for each position.
   - `selftest.mjs`: 48/48; `--live`: 75/75.
 
 Credit: @igoryuzo's `aero-stock-lp`. The ledger is built on DeltaDesk's LP truth layer
-(https://web-production-10951.up.railway.app, {{GITHUB_URL}}). Informational analytics, not investment advice.
+(https://web-production-10951.up.railway.app, https://github.com/OoJae/deltadesk). Informational analytics, not investment advice.
 ````

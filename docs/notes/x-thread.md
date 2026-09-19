@@ -109,7 +109,7 @@ Honest notes:
 • A rerange costs ~$0.107 in gas, so a $50 lane mints once and holds that range.
 
 Demo: {{DEMO_VIDEO_URL}}
-Code: {{GITHUB_URL}}
+Code: https://github.com/OoJae/deltadesk
 Built for Runtime Agent Week
 ```
 
