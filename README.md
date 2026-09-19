@@ -26,6 +26,7 @@ Data: 3.34M swaps and $1.07B of volume in NVDA/USDG (Uniswap v3), SPY/USDG, TSLA
   - Attributed fees conserve pool fees exactly.
   - 1,938 fully collected positions match on-chain collects within 1 bp.
   - Golden positions match within 0.0011 bp.
+- **On Aerodrome (Base), emissions are what pay LPs.** NVDAc/USDC swap fees cover 0.97× what informed flow takes. 82% of fees go to veAERO voters. Fees kept plus AERO received cover it 1.22×. Every AERO paid out is attributed to a position and reconciles to on-chain claims (4e-8).
 - **Honest negative result:** a fair-value gap rule tuned in-sample failed out of sample (−$128). The simple reopen guard was the only rule positive in both periods.
 
 ## Product
@@ -33,7 +34,7 @@ Data: 3.34M swaps and $1.07B of volume in NVDA/USDG (Uniswap v3), SPY/USDG, TSLA
 | Surface | What it does | Access |
 |---|---|---|
 | **Truth Study** | Pool × regime × hour-of-week fee vs picked-off heatmaps; the Flow X-ray (who takes LP money) | Public web + `/study`, `/study/table/*` |
-| **Tearsheet** | Paste a wallet. Returns fees, picked off (vs HL), IL vs HODL, price P&L, gas, net, each per $1k, plus a reconciliation residual | `/tearsheet/robinhood/{wallet}` (x402, $0.05) |
+| **Tearsheet** | Paste a wallet on Robinhood Chain or Base (Aerodrome, staked or unstaked). Returns fees kept, AERO, picked off (vs HL), IL vs HODL, price P&L, gas, net, each per $1k, plus a reconciliation residual | `/tearsheet/{robinhood\|base}/{wallet}` (x402, $0.05) |
 | **LP League** | 1,003 LP managers ranked by result vs holding per $1k·day, with strategy fingerprints | `/lp-league` (x402, $0.02) |
 | **Safe to LP?** | ALLOW / CAUTION / BLOCK. Checks the pool's gap to HL fair value, the market regime, this hour's historical toxicity and oracle freshness | `/safe-to-lp/{pool}` (x402, $0.005) |
 | **Fair value** | HL 24/7 price × a session-calibrated basis, vs the pool mid and Chainlink (frozen on weekends) | `/fair-value/{pool}` (public) |
@@ -67,6 +68,9 @@ Chainlink (4663)      ─  rounds            └─ gap-exclusion backtest (trai
 | Flow X-ray labels (deterministic rules) | [engine/flow/labels.py:64](engine/flow/labels.py#L64) |
 | Gap-exclusion backtest | [engine/backtest/gap_exclusion.py:477](engine/backtest/gap_exclusion.py#L477) |
 | LP League score | [engine/league/build.py:29](engine/league/build.py#L29) |
+| Aerodrome: pool study (voter fee split, emission schedule) | [engine/aero/study.py](engine/aero/study.py) |
+| Aerodrome: staked/unstaked fees, AERO reward sweep, penalties | [engine/aero/positions.py](engine/aero/positions.py) |
+| Precision-safe feeGrowth sweep (double-double) | [engine/positions/attribute.py](engine/positions/attribute.py) (`two_sum_rows`, `sweep`) |
 | `/safe-to-lp` decision function | [engine/api/app.py:99](engine/api/app.py#L99) |
 | Market calendar, including reopen windows | [engine/api/live.py:75](engine/api/live.py#L75) |
 | Refresh pipeline | [engine/pipeline/refresh.py](engine/pipeline/refresh.py) |
@@ -83,7 +87,7 @@ uv run python -m indexer.hs_backfill && uv run python -m indexer.hl_candles
 uv run python -m markout.study && uv run python -m markout.hl_ref
 uv run python -m positions.attribute && uv run python -m league.build
 uv run python -m flow.xray && uv run python -m backtest.gap_exclusion
-uv run python -m pytest tests -q  # 122 tests
+uv run python -m pytest tests -q  # 131 tests
 uv run uvicorn api.app:app --port 8787
 cd ../web && npm i && DELTADESK_API=http://127.0.0.1:8787 npm run dev
 ```
@@ -93,7 +97,9 @@ Or `docker build -t deltadesk . && docker run -p 8787:8787 -e ENVIO_API_TOKEN=�
 ## Status
 
 - **Built (M0–M1):** the truth layer above: data, attribution, Study, Tearsheet, League, API, web, x402 handlers, skill.
-- **In progress:** Aerodrome (Base) tearsheets with staked/unstaked positions, and the x402 deploy.
+- **Live:**
+  - Aerodrome (Base) tearsheets for staked and unstaked positions (fees kept, AERO, penalties, voter share).
+  - x402 endpoints on Bankr: `https://x402.bankr.bot/0xd8d5b9389721258bcdfa7ac1306af6330e5634cd/<service>`.
 - **Next:** the desk itself.
   - A DeskAccount contract that can only pay its owner.
   - A delegated agent executor.

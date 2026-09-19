@@ -2,12 +2,16 @@
 
 *Robinhood Chain (4663), Uniswap v3 NVDA/USDG and v4 SPY/USDG, TSLA/USDG, QQQ/SPY. Every swap from each pool's launch to 2026‑09‑18 (3.34M swaps, $1.07B volume). Fair value comes from Hyperliquid trade.xyz 24/7 prices, scaled by a basis calibrated on each prior regular session. Four modules, each adversarially reviewed; 122 tests.*
 
-## The answer in five lines
+## The answer in six lines
 
 1. **LPs keep money, but barely.** In NVDA/USDG, LPs earned **$362.9k** in fees and informed flow took back **$289.5k** (against Hyperliquid, 1h). Edge is **1.25**, about +0.8 bp of volume. For every $80 of fees, about **$64** was picked off.
 2. **Regular market hours are a losing game** when marked against Hyperliquid: edge **0.92** at 1h, 0.99 at 5m. The Monday 09:00 ET hour runs at **0.25**; the 09:20–09:45 open at 0.56. The weekend dark window stays profitable (edge **3.50**), but the M0 self-markout overstated it by about 20% at 1h and 2.7× at 5m.
 3. **Three operators are the whole problem.** HL-arbitrage bots (887 wallets behind 136 operators) take **66% of all positive picked-off value** while paying 37% of fees; their edge against HL is 0.47. Grouped by operator, **the top 3 take 98.6% of NVDA's net picked-off.** Retail (126,618 wallets) and aggregator flow (32k wallets) *pay* LPs: they lose on price as well as paying fees.
 4. **Every dollar reconciles.** Fee attribution to 17,124 positions conserves pool fees exactly (0.0000%), and reconstructed liquidity matches the Swap events on 100% of swaps. Golden positions match on-chain collected fees within **0.0001–0.0011 bp**, and so does every fully collected position ≥ $1k (1,938 of them).
+6. **On Aerodrome (Base), fees alone don't pay for informed flow; emissions do.** NVDAc/USDC LPs' swap fees cover
+   only 0.97× what informed flow took (vs Hyperliquid, 1h). Staked liquidity gives its fees to veAERO voters (82% of
+   all fees went there) and is paid in AERO instead: fees kept + AERO received cover it **1.22×**. Unstaked LPs, who
+   keep 90% of their fee share, can still lose badly: the largest one lost **$25.5k vs holding in 7.8 days**.
 5. **A clever rule didn't beat a simple one out of sample.** Pulling liquidity when the pool strays from HL fair value (thresholds fitted on Jul 28–Aug 31) returned **−$128** on NVDA over Sep 1–18. The **reopen guard** (stepping out 09:20–09:45 and Sunday 19:50–20:15) was the only rule positive in both periods: +$6.9k in train, +$7.8k in test, giving up 7% of fees. Nothing is statistically solid yet; two bad days dominate.
 
 ## 1 · HL-referenced markouts (`markout/hl_ref.py`)
@@ -90,6 +94,41 @@
 
 - **Why R2 failed.** φ fitted on 15-minute-stale gaps is too wide for fresh 1–5-minute gaps: the rule was out for 9.6% of train swaps but only 0.7% of test swaps.
 - **What this means for the desk.** Ship the reopen guard and historical-toxicity gates now. Recalibrate the fair-value gap on the live 1 s tape as it accumulates, which started Sep 18. The day-block bootstrap 95% CI on R1's test gain is [−$36k, +$78k]: no rule is statistically proven yet.
+
+## 5 · Aerodrome NVDAc/USDC on Base (`aero/`)
+
+*323,928 swaps, $204M volume, Aug 12 → Sep 19 2026; 46,598 positions (18,125 ever staked in the gauge).*
+
+| | USD |
+|---|---|
+| Swap fees, all liquidity | $102.3k |
+| → to veAERO voters (staked liquidity's share + 10% `unstakedFee`) | $84.3k |
+| → kept by LPs | $18.0k |
+| AERO distributed to staked LPs (223,079 AERO; 18,592 forfeited by exits < 5 min) | $110.7k received |
+| Value picked off by informed flow (vs Hyperliquid, 1h) | $105.5k |
+| LPs' result vs simply holding (fees + AERO − IL − gas) | +$31.2k |
+
+- **Gauge rules, from the verified contract source.**
+  - Staked liquidity earns no fees: the pool's fee growth is per unit of unstaked liquidity, and the NPM credits only unstaked tokens.
+  - Staked liquidity earns AERO per unit of in-range staked liquidity. Deposit and withdraw collect fees first.
+  - A claim within 300 s of deposit forfeits 100% of the reward.
+- **Reconciliation** (golden pair in `data/study/m1/aero/reconciliation.json`):
+
+| Check | Result |
+|---|---|
+| Fee conservation | exact |
+| NPM mints linked to a tokenId | 60,936 / 60,936 |
+| Reconstructed liquidity vs every Swap event | 100% match |
+| Fully collected positions (46,183) | Σ residual −$0.40 on $17.2k of fees; 99.998% within 1 bp |
+| AERO attributed vs distributed | 223,078.97 = 223,078.97 |
+| AERO computed vs on-chain claims + penalties (467 wallets with no stake open) | relative error 4e-8 |
+
+- **Golden pair.**
+  - Unstaked `npm:5677798`: kept exactly 90% of a $1,030.68 fee share. Residual −0.0001 bp. Picked off $4,454; −$25.5k vs holding.
+  - Staked `npm:5131951`: $465 fee share, all to voters; 1,869 AERO ($917); +$899 vs holding. The owner's AERO matches claims to the wei.
+- **Two data lessons.**
+  - The pool twice sat at extreme ticks for about two days: dust swaps pushed it through empty ranges between real trades. Tokens are therefore valued at the last real-swap price whenever the pool state is more than 2× away from it.
+  - Buckets that once held only dust liquidity get enormous per-unit growth. The attribution sweep now keeps double-double accumulators and two-part range sums, so that growth can't round away other buckets' fees. Robinhood results are unchanged to 1e-11.
 
 ## Caveats
 
