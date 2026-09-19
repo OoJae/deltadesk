@@ -68,6 +68,9 @@ def reward_sweep(seg: pl.DataFrame, path: pl.DataFrame, sched: pl.DataFrame, pri
     kinds = np.concatenate([np.zeros(len(p_ts)), np.ones(len(s0)), np.full(len(s1), 2), np.full(len(r_ts), 3), np.full(len(r_end), 3)])
     times = np.concatenate([p_ts, s0, s1, r_ts, r_end])
     ref = np.concatenate([np.arange(len(p_ts)), np.arange(len(s0)), np.arange(len(s1)), np.arange(len(r_ts)), np.arange(len(r_end))])
+    # stop at the data end (a final no-op event there closes the last interval); nothing after it is observed
+    keep = times <= t_end
+    kinds, times, ref = np.append(kinds[keep], 3), np.append(times[keep], t_end), np.append(ref[keep], 0)
     order = np.lexsort((kinds, times))  # at equal times: tick, then starts, then ends, then rate changes
     G = np.zeros(nb)
     Gu = np.zeros(nb)
