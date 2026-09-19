@@ -1,7 +1,12 @@
 import FlowXray, { type FlowRow } from "@/components/FlowXray";
 import StudyView, { type PoolStudy } from "@/components/StudyView";
-import { table, type Row } from "@/lib/api";
-import { POOLS, usd } from "@/lib/format";
+import { api, table, type Row } from "@/lib/api";
+import { POOLS, ratio, usd } from "@/lib/format";
+
+type AeroSummary = {
+  swaps: number; vol_usd: number; fees_gross_usd: number; fees_to_voters_usd: number; fees_to_lps_usd: number; emissions_aero: number;
+  emissions_usd: number; picked_hl_1h_usd: number; edge_gross_hl_1h: number | null; edge_lp_income_hl_1h: number | null; first_utc: string; last_utc: string;
+};
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +18,8 @@ export default async function StudyPage() {
     table("m0", "by_pool"), table("m0", "by_regime"), table("m0", "by_how"),
     table("flow", "by_label"), table("flow", "concentration"),
   ]);
+  const aeroRes = await api<AeroSummary>("/study/aero");
+  const aero = aeroRes.ok ? aeroRes.data : null;
   if (!m0Pool.ok) {
     return <main className="mx-auto max-w-5xl p-8 text-ink-2">The study is still being computed ({m0Pool.error}). Try again in a few minutes.</main>;
   }
@@ -117,6 +124,39 @@ export default async function StudyPage() {
           <p className="text-xs text-muted">
             Every swap is joined to the wallet that sent it; bot wallets that share a private router contract are grouped as one operator. Labels are deterministic
             rules (Hyperliquid lead, 5-minute win rate, frequency), not a model. Net shares are on the pool&apos;s own price 1 hour later.
+          </p>
+        </section>
+      )}
+
+      {aero && (
+        <section className="card space-y-5 p-5">
+          <div className="space-y-2">
+            <p className="text-xs font-medium uppercase tracking-wider text-muted">Base · Aerodrome NVDAc/USDC</p>
+            <h2 className="max-w-3xl text-xl font-semibold leading-snug">
+              On Aerodrome, swap fees alone don&apos;t pay for informed flow. Emissions do.
+            </h2>
+            <p className="max-w-3xl text-sm text-ink-2">
+              Staked liquidity gives its fees to veAERO voters and earns AERO instead, and most liquidity here is staked. Of {usd(aero.fees_gross_usd, 0)} in
+              swap fees, {usd(aero.fees_to_voters_usd, 0)} ({Math.round((100 * aero.fees_to_voters_usd) / Math.max(aero.fees_gross_usd, 1))}%) went to voters.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            {[
+              { k: "Swap fees (all liquidity)", v: usd(aero.fees_gross_usd, 0), d: `${usd(aero.vol_usd, 0)} volume` },
+              { k: "Picked off by informed flow", v: usd(aero.picked_hl_1h_usd, 0), d: "vs Hyperliquid, 1h" },
+              { k: "Fees kept by LPs", v: usd(aero.fees_to_lps_usd, 0), d: "unstaked liquidity, after the 10% cut" },
+              { k: "AERO emissions", v: usd(aero.emissions_usd, 0), d: `${Math.round(aero.emissions_aero).toLocaleString()} AERO at accrual prices` },
+            ].map((x) => (
+              <div key={x.k} className="rounded-lg bg-surface-2 p-3">
+                <div className="text-xs text-muted">{x.k}</div>
+                <div className="mt-1 text-2xl font-semibold tabular">{x.v}</div>
+                <div className="text-xs text-ink-2">{x.d}</div>
+              </div>
+            ))}
+          </div>
+          <p className="text-sm text-ink-2 tabular">
+            Edge (income ÷ value picked off): swap fees alone <strong className="text-ink">{ratio(aero.edge_gross_hl_1h)}</strong>; what LPs actually receive,
+            fees kept plus emissions, <strong className="text-ink">{ratio(aero.edge_lp_income_hl_1h)}</strong>. Pool-level, {aero.first_utc.slice(0, 10)} → {aero.last_utc.slice(0, 10)}.
           </p>
         </section>
       )}
