@@ -20,5 +20,5 @@ export default async function handler(req: Request) {
     signal: AbortSignal.timeout(25_000),
   });
   if (!upstream.ok) return json({ error: `upstream ${upstream.status}`, detail: await upstream.text() }, upstream.status >= 500 ? 502 : upstream.status);
-  return await upstream.json();
+  return json(await upstream.json());
 }
