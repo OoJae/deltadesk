@@ -1,0 +1,6 @@
+allowBuilds:
+  "@dynamic-labs-wallet/node": true
+  better-sqlite3: true
+  esbuild: true
+  # postinstall only prints a version-scheme warning; pulled in via @dynamic-labs-wallet/node-evm → MetaMask connect
+  protobufjs: false
