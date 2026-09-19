@@ -16,7 +16,7 @@ from pathlib import Path
 
 import polars as pl
 
-from markout.pools import DATA, POOLS, decode_swaps, load_raw
+from markout.pools import DATA, POOLS, decode_swaps, scan_raw
 
 OUT = DATA / "study" / "m0"
 HORIZONS = {"1m": 60, "5m": 300, "1h": 3600}
@@ -69,14 +69,14 @@ def to_usd(sw: pl.DataFrame, pool_key: str, spy_mid: pl.DataFrame | None) -> pl.
 
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
-    raws: dict[str, pl.DataFrame] = {}
+    raws: dict[str, pl.LazyFrame] = {}
     swaps = []
     spy_mid = None
     # SPY/USDG first so QQQ/SPY can be valued in USD.
     order = sorted(POOLS, key=lambda p: 0 if p.key == "SPY/USDG" else 1)
     for pool in order:
         if pool.source not in raws:
-            raws[pool.source] = load_raw(pool.source)
+            raws[pool.source] = scan_raw(pool.source)
         sw = decode_swaps(pool, raws[pool.source]).sort(["block", "tx_index", "log_index"])
         if sw.is_empty():
             print(f"{pool.key}: no swaps")

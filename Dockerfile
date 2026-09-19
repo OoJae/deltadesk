@@ -5,6 +5,8 @@ COPY --from=node:22-slim /usr/local/bin/node /usr/local/bin/node
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 WORKDIR /app
 ENV UV_PROJECT_ENVIRONMENT=/app/.venv UV_PYTHON_DOWNLOADS=never PYTHONUNBUFFERED=1
+# Few glibc malloc arenas: polars/numpy threads otherwise fragment memory well past the working set.
+ENV MALLOC_ARENA_MAX=2
 COPY engine/pyproject.toml engine/uv.lock engine/.python-version engine/
 RUN cd engine && uv sync --frozen --no-dev --no-install-project
 COPY engine engine

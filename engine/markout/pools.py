@@ -62,11 +62,20 @@ def _signed(x: int, bits: int = 256) -> int:
     return x - (1 << bits) if x >= 1 << (bits - 1) else x
 
 
-def load_raw(source: str) -> pl.DataFrame:
+def _raw_files(source: str) -> list[Path]:
     files = sorted((DATA / "raw" / source).glob("hs_*.parquet")) or sorted((DATA / "raw" / source).glob("*.parquet"))
     if not files:
         raise FileNotFoundError(f"no raw data for {source}")
-    return pl.concat([pl.read_parquet(f) for f in files]).sort(["block", "tx_index", "log_index"])
+    return files
+
+
+def scan_raw(source: str) -> pl.LazyFrame:
+    """Lazy view of a source's raw logs. Files cover consecutive block ranges and are each sorted, so file order is log order."""
+    return pl.concat([pl.scan_parquet(f) for f in _raw_files(source)], how="diagonal_relaxed")
+
+
+def load_raw(source: str) -> pl.DataFrame:
+    return pl.concat([pl.read_parquet(f) for f in _raw_files(source)]).sort(["block", "tx_index", "log_index"])
 
 
 def block_to_ts() -> tuple[np.ndarray, np.ndarray]:
@@ -75,27 +84,63 @@ def block_to_ts() -> tuple[np.ndarray, np.ndarray]:
     return df["block"].to_numpy(), df["ts"].to_numpy()
 
 
-def decode_swaps(pool: Pool, raw: pl.DataFrame, anchors: tuple[np.ndarray, np.ndarray] | None = None) -> pl.DataFrame:
+DECODE_CHUNK = 400_000  # swaps per chunk: bounds peak memory (NVDA has ~3M swaps with 320-char hex payloads)
+
+
+def decode_swaps(pool: Pool, raw: pl.DataFrame | pl.LazyFrame, anchors: tuple[np.ndarray, np.ndarray] | None = None) -> pl.DataFrame:
+    """Decode a pool's Swap logs. `raw` may be lazy (scan_raw): swaps are then decoded in block-range chunks, so the
+    full raw table is never materialized."""
+    lf = raw.lazy()
+    has_ts = "ts" in lf.collect_schema().names()
     if pool.venue == "v3":
-        sel = raw.filter((pl.col("address") == pool.pool_id) & (pl.col("topic0") == V3_SWAP))
+        is_swap = (pl.col("address") == pool.pool_id) & (pl.col("topic0") == V3_SWAP)
     else:
-        sel = raw.filter((pl.col("topic0") == V4_SWAP) & (pl.col("topic1") == pool.pool_id))
+        is_swap = (pl.col("topic0") == V4_SWAP) & (pl.col("topic1") == pool.pool_id)
+    sender_col = "topic2" if pool.venue == "v4" else "topic1"
+    sel = lf.filter(is_swap).select("block", "tx_index", "log_index", "tx_hash", "data", sender_col, *(["ts"] if has_ts else []))
 
     # v3 protocol fee: the pool keeps 1/N of each swap fee (N = 4..10, 0 = off), separately per input token.
     fp_blocks, fp0s, fp1s = [0], [0], [0]
     if pool.venue == "v3":
-        ev = raw.filter((pl.col("address") == pool.pool_id) & (pl.col("topic0") == V3_SET_FEE_PROTOCOL)).sort("block")
-        for blk, data in ev.select(["block", "data"]).iter_rows():
+        ev = lf.filter((pl.col("address") == pool.pool_id) & (pl.col("topic0") == V3_SET_FEE_PROTOCOL)).select("block", "data").collect().sort("block")
+        for blk, data in ev.iter_rows():
             w = _words(data)
             fp_blocks.append(blk); fp0s.append(w[2]); fp1s.append(w[3])
         if len(fp_blocks) == 1 and pool.v3_fee_protocol_now:
             fp0s[0], fp1s[0] = pool.v3_fee_protocol_now % 16, pool.v3_fee_protocol_now >> 4
             print(f"{pool.key}: no SetFeeProtocol events; assuming feeProtocol={pool.v3_fee_protocol_now} for all history")
-    fp_blocks_np = np.array(fp_blocks)
+    fp = (np.array(fp_blocks), fp0s, fp1s)
 
-    recs = []
-    prev_tick = None
-    for blk, txi, li, txh, data, sender in sel.select(["block", "tx_index", "log_index", "tx_hash", "data", "topic2" if pool.venue == "v4" else "topic1"]).iter_rows():
+    # Chunk on block boundaries (a block's logs stay together) so row-group statistics skip everything else.
+    blocks = sel.select("block").collect()["block"].sort()
+    edges = [int(b) for b in blocks.gather_every(DECODE_CHUNK)] + [int(blocks[-1]) + 1] if len(blocks) else []
+    edges = sorted(set(edges))
+    parts, prev_tick = [], None
+    for lo, hi in zip(edges[:-1], edges[1:]):
+        chunk = sel.filter(pl.col("block").is_between(lo, hi, closed="left")).collect().sort(["block", "tx_index", "log_index"])
+        part, prev_tick = _decode_chunk(pool, chunk, sender_col, fp, prev_tick)
+        parts.append(part)
+    if not parts:
+        parts.append(_decode_chunk(pool, sel.limit(0).collect(), sender_col, fp, None)[0])
+    df = pl.concat(parts)
+
+    if has_ts:  # HyperSync: exact block timestamps
+        df = df.with_columns(pl.col("ts").cast(pl.Float64))
+    else:  # RPC segments: interpolate from sampled block-timestamp anchors
+        bk, ts = anchors if anchors is not None else block_to_ts()
+        df = df.with_columns(pl.Series("ts", np.interp(df["block"].to_numpy(), bk, ts)).cast(pl.Float64))
+    return df.with_columns(pl.lit(pool.key).alias("pool"))
+
+
+def _decode_chunk(pool: Pool, sel: pl.DataFrame, sender_col: str, fp: tuple[np.ndarray, list[int], list[int]],
+                  prev_tick: int | None) -> tuple[pl.DataFrame, int | None]:
+    """Decode one ordered chunk of Swap logs into typed columns. Returns the rows kept and the last tick seen."""
+    fp_blocks_np, fp0s, fp1s = fp
+    n_sel = sel.height
+    f64 = {c: np.empty(n_sel) for c in ("q", "quote_amt", "p_exec", "p_ex", "fee_q", "proto_q", "mid_after", "liquidity")}
+    i64 = {c: np.empty(n_sel, dtype=np.int64) for c in ("s", "tick_before", "tick")}
+    keep = np.zeros(n_sel, dtype=bool)
+    for i, (blk, data) in enumerate(zip(sel["block"], sel["data"])):
         w = _words(data)
         a0, a1 = _signed(w[0]), _signed(w[1])
         sqrtp = w[2]
@@ -142,17 +187,20 @@ def decode_swaps(pool: Pool, raw: pl.DataFrame, anchors: tuple[np.ndarray, np.nd
         # pool mid after swap: raw price token1/token0 = (sqrtP / 2^96)^2
         raw_p = (sqrtp / 2**96) ** 2 * 10 ** (pool.dec0 - pool.dec1)  # human token1 per token0
         mid_after = raw_p if pool.base_is_0 else 1 / raw_p  # quote per base
-        recs.append((blk, txi, li, txh, (sender or "")[-40:], s, q, quote_amt, p_exec, p_ex, fee_q, proto_q, mid_after, float(liq), tick_before, tick))
+        keep[i] = True
+        i64["s"][i], i64["tick_before"][i], i64["tick"][i] = s, tick_before, tick
+        for c, v in (("q", q), ("quote_amt", quote_amt), ("p_exec", p_exec), ("p_ex", p_ex), ("fee_q", fee_q), ("proto_q", proto_q),
+                     ("mid_after", mid_after), ("liquidity", float(liq))):
+            f64[c][i] = v
 
-    df = pl.DataFrame(
-        recs,
-        schema=["block", "tx_index", "log_index", "tx_hash", "sender", "s", "q", "quote_amt", "p_exec", "p_ex", "fee_q", "proto_q", "mid_after", "liquidity", "tick_before", "tick"],
-        orient="row",
+    df = (
+        sel.select(
+            pl.col("block").cast(pl.Int64), pl.col("tx_index").cast(pl.Int64), pl.col("log_index").cast(pl.Int64), "tx_hash",
+            pl.col(sender_col).fill_null("").str.slice(-40).alias("sender"),
+        )
+        .with_columns(pl.Series("s", i64["s"]), *[pl.Series(c, f64[c]) for c in ("q", "quote_amt", "p_exec", "p_ex", "fee_q", "proto_q", "mid_after", "liquidity")],
+                      pl.Series("tick_before", i64["tick_before"]), pl.Series("tick", i64["tick"]))
+        .with_columns(*([sel["ts"]] if "ts" in sel.columns else []))
+        .filter(pl.Series(keep))
     )
-    if "ts" in raw.columns:  # HyperSync: exact block timestamps
-        bts = raw.select("block", pl.col("ts").cast(pl.Float64)).unique("block")
-        df = df.join(bts, on="block", how="left")
-    else:  # RPC segments: interpolate from sampled block-timestamp anchors
-        bk, ts = anchors if anchors is not None else block_to_ts()
-        df = df.with_columns(pl.Series("ts", np.interp(df["block"].to_numpy(), bk, ts)).cast(pl.Float64))
-    return df.with_columns(pl.lit(pool.key).alias("pool"))
+    return df, prev_tick

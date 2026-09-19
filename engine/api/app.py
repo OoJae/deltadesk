@@ -141,7 +141,7 @@ def _pipeline_state() -> dict:
 
 @app.get("/health")
 def health():
-    steps = {k: {"ok": v.get("ok"), "ran_at": v.get("ran_at"), "secs": v.get("secs")} for k, v in _pipeline_state().items()}
+    steps = {k: {"ok": v.get("ok"), "rc": v.get("rc"), "ran_at": v.get("ran_at"), "secs": v.get("secs")} for k, v in _pipeline_state().items()}
     return {"ok": True, "time": time.time(), "pipeline_running": (live.DATA / "pipeline.lock").exists(), "pipeline": steps}
 
 

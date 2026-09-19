@@ -68,8 +68,11 @@ def main():
             t0 = time.time()
             r = subprocess.run([sys.executable, "-m", *cmd], cwd=ENGINE, capture_output=True, text=True, timeout=4 * 3600)
             ok = r.returncode == 0
-            state[name] = {"ok_at": time.time() if ok else last, "ran_at": time.time(), "ok": ok, "secs": round(time.time() - t0, 1),
-                           "tail": (r.stdout + r.stderr)[-1500:]}
+            tail = (r.stdout + r.stderr)[-1500:]
+            if r.returncode < 0:  # killed by a signal: on the server this is almost always the OOM killer (SIGKILL)
+                tail += f"\n[killed by signal {-r.returncode}{' (likely out of memory)' if r.returncode == -9 else ''}]"
+            state[name] = {"ok_at": time.time() if ok else last, "ran_at": time.time(), "ok": ok, "rc": r.returncode,
+                           "secs": round(time.time() - t0, 1), "tail": tail}
             print(f"{name}: {'ok' if ok else 'FAILED'} in {state[name]['secs']}s", flush=True)
             STATE.write_text(json.dumps(state, indent=1))
     finally:
