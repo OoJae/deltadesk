@@ -103,7 +103,7 @@ export default function AgentPanel({ lane, vault, jwt, isOwner }: Props) {
       <div className="space-y-2">
         <div className="text-sm font-semibold">Approvals</div>
         {approvals.length === 0 ? (
-          <p className="text-sm text-ink-2">{s.mode === "copilot" ? "Nothing waiting. Risk-adding actions will appear here; silence means no." : "Approvals appear here in copilot mode."}</p>
+          <p className="text-sm text-ink-2">{s.mode === "copilot" ? "Nothing waiting. Risk-adding actions and gate signals appear here; silence means no." : "Approvals appear here in copilot mode."}</p>
         ) : (
           <ul className="space-y-2">
             {approvals.map((a) => (
@@ -135,7 +135,8 @@ function Approval({ lane, a, now, jwt, canAct, onDone }: { lane: Address; a: Pen
   return (
     <li className="space-y-2 rounded-lg border border-[var(--ring)] p-3 text-sm">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <strong>Risk-adding action</strong>
+        {/* The summary starts with the action kind (e.g. "signal: gates CLOSED…"); a signal moves no funds. */}
+        <strong>{a.summary?.startsWith("signal") ? "Gate signal (on-chain note, moves no funds)" : "Risk-adding action"}</strong>
         <span className="tabular text-xs text-ink-2">{left != null ? (left > 0 ? `expires in ${Math.ceil(left)} s` : "expired") : ""}</span>
       </div>
       {a.summary && <p className="text-ink-2">{a.summary}</p>}
