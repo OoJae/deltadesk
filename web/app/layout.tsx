@@ -1,45 +1,50 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import Link from "next/link";
+import type { Metadata, Viewport } from "next";
+import { Bodoni_Moda, IBM_Plex_Mono, Instrument_Sans } from "next/font/google";
+import { StampProvider } from "@/components/brand/StampToast";
+import { SiteFooter } from "@/components/nav/SiteFooter";
+import { SiteNav } from "@/components/nav/SiteNav";
 import "./globals.css";
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+// Display: Bodoni Moda (opsz 6–96, italic) for hero and section titles only; it is what certificates were engraved in.
+const display = Bodoni_Moda({ subsets: ["latin"], style: ["normal", "italic"], axes: ["opsz"], variable: "--font-bodoni", display: "swap" });
+// Body: Instrument Sans with its width axis (75–100) for condensed, engraved-style small caps.
+const body = Instrument_Sans({ subsets: ["latin"], axes: ["wdth"], variable: "--font-instrument", display: "swap" });
+// Utility: IBM Plex Mono for tickers, serials, addresses and every number.
+const mono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-plex", display: "swap" });
+
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://web-production-10951.up.railway.app";
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
+  // Pages set full titles themselves ("Live desk · DeltaDesk"), so there is no title template.
   title: "DeltaDesk · the open market-making desk for tokenized stocks",
-  description: "Can LPs beat informed flow on tokenized stocks? Every swap in Robinhood Chain's stock pools, marked against Hyperliquid's 24/7 price.",
+  description:
+    "Market making stocks was a closed club. We published its books: every swap in Robinhood Chain's stock pools, marked against Hyperliquid's 24/7 price, and a desk of your own.",
+  applicationName: "DeltaDesk",
+  openGraph: { type: "website", siteName: "DeltaDesk" },
+  twitter: { card: "summary_large_image" },
 };
 
-// /desk is never prefetched: it mounts the wallet SDK, which should load only when someone opens a desk page.
-const NAV: { href: string; label: string; prefetch?: boolean }[] = [
-  { href: "/", label: "Study" },
-  { href: "/live", label: "Live desk" },
-  { href: "/tearsheet", label: "Tearsheet" },
-  { href: "/league", label: "League" },
-  { href: "/console", label: "Console" },
-  { href: "/desk", label: "Desk", prefetch: false },
-];
+export const viewport: Viewport = {
+  themeColor: "#0A0D0C",
+  colorScheme: "dark",
+};
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="flex min-h-full flex-col">
-        <nav className="sticky top-0 z-10 border-b border-grid bg-page/90 backdrop-blur">
-          <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-3">
-            <Link href="/" className="flex shrink-0 items-center gap-2 font-semibold">
-              <svg width="22" height="22" viewBox="0 0 64 64" aria-hidden><rect width="64" height="64" rx="14" fill="var(--surface-2)" /><path d="M14 44 L26 30 L34 38 L50 20" stroke="var(--accent)" strokeWidth="6" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
-              DeltaDesk
-            </Link>
-            <div className="-mx-2 flex text-sm sm:mx-0 sm:gap-1">
-              {NAV.map((n) => (
-                <Link key={n.href} href={n.href} prefetch={n.prefetch} className="whitespace-nowrap rounded-lg px-2 py-1.5 text-ink-2 hover:bg-surface-2 hover:text-ink sm:px-3">{n.label}</Link>
-              ))}
-            </div>
+    <html lang="en" className={`${display.variable} ${body.variable} ${mono.variable} h-full`}>
+      <body className="flex min-h-full flex-col bg-vault text-paper">
+        <a href="#content" className="skip-link">
+          Skip to content
+        </a>
+        <StampProvider>
+          <SiteNav />
+          <div id="content" tabIndex={-1} className="flex-1 outline-none">
+            {children}
           </div>
-        </nav>
-        <div className="flex-1">{children}</div>
-        <footer className="border-t border-grid py-6 text-center text-xs text-muted">Informational analytics, not investment advice · data: Robinhood Chain, Hyperliquid trade.xyz, Chainlink</footer>
+          <SiteFooter />
+        </StampProvider>
+        <div aria-hidden="true" className="grain" />
       </body>
     </html>
   );

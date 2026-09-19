@@ -1,52 +1,95 @@
 @import "tailwindcss";
 
-/* DeltaDesk tokens: dataviz reference palette (light + selected dark steps). Components use roles, never raw hex. */
-:root {
-  color-scheme: light;
-  --page: #f9f9f7;
-  --surface-1: #fcfcfb;
-  --surface-2: #f3f2ee;
-  --text-primary: #0b0b0b;
-  --text-secondary: #52514e;
-  --text-muted: #898781;
-  --grid: #e1e0d9;
-  --axis: #c3c2b7;
-  --ring: rgba(11, 11, 11, 0.1);
-  --accent: #2a78d6;
-  --series-1: #2a78d6;
-  --series-2: #eb6834;
-  --series-3: #1baf7a;
-  --div-mid: #f0efec;
-  --div-pos-1: #cde2fb; --div-pos-2: #86b6ef; --div-pos-3: #3987e5; --div-pos-4: #1c5cab;
-  --div-neg-1: #f9d2d1; --div-neg-2: #f09c9b; --div-neg-3: #e34948; --div-neg-4: #a52e2d;
-  --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
-  --good-text: #006300;
-}
+/* ==============================================================================================================
+   DeltaDesk: "Engraved Certificate".
+   Every value is lifted from the engraved share certificate: green-black engraving ink (vault), cream certificate
+   stock (paper), and the red serial number (serial), the single accent. Components use roles, never raw hex.
+   Full spec and API: components/brand/README.md · live brand book: /brand
+   ============================================================================================================== */
 
-@media (prefers-color-scheme: dark) {
-  :root:where(:not([data-theme="light"])) {
-    color-scheme: dark;
-    --page: #0d0d0d;
-    --surface-1: #1a1a19;
-    --surface-2: #232321;
-    --text-primary: #ffffff;
-    --text-secondary: #c3c2b7;
-    --text-muted: #898781;
-    --grid: #2c2c2a;
-    --axis: #383835;
-    --ring: rgba(255, 255, 255, 0.1);
-    --accent: #3987e5;
-    --series-1: #3987e5;
-    --series-2: #d95926;
-    --series-3: #199e70;
-    --div-mid: #383835;
-    --div-pos-1: #184f95; --div-pos-2: #256abf; --div-pos-3: #3987e5; --div-pos-4: #86b6ef;
-    --div-neg-1: #6e2322; --div-neg-2: #a52e2d; --div-neg-3: #e34948; --div-neg-4: #f09c9b;
-    --good-text: #0ca30c;
-  }
+:root {
+  color-scheme: dark;
+
+  /* ---- Brand ink ------------------------------------------------------------------------------------------- */
+  --vault: #0a0d0c; /* page: engraving-ink black, green cast */
+  --vault-2: #131816; /* raised panels, table stripes */
+  --vault-3: #1b211e; /* inputs, hover wash (derived one step above vault-2) */
+  --paper: #ede6d6; /* primary ink: certificate cream, never pure white. 15.70:1 on vault */
+  --paper-dim: #a7a293; /* secondary text. 7.65:1 on vault, 7.04:1 on vault-2 */
+  --paper-mute: #8f8a7c; /* tertiary text, captions. 5.67:1 on vault, 5.21:1 on vault-2, 4.75:1 on vault-3 */
+  --rule: rgba(237, 230, 214, 0.14); /* hairlines, engraving strokes at rest */
+  --rule-strong: rgba(237, 230, 214, 0.28); /* hover / emphasised hairlines */
+  --serial: #e4472b; /* THE accent: fair value, the gap, primary CTA, focus. 4.87:1 on vault */
+  --serial-ink: #0a0d0c; /* text on a serial fill (4.87:1); paper on serial is only 3.23:1, never use it for text */
+
+  /* ---- Motion ---------------------------------------------------------------------------------------------- */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-inout: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-micro: 0.24s;
+  --dur-reveal: 0.8s;
+  --dur-page: 1.2s;
+  --stagger: 0.08s;
+
+  /* ---- Type scale ------------------------------------------------------------------------------------------ */
+  --size-hero: clamp(3rem, 8.5vw, 9.5rem);
+  --size-section: clamp(2.25rem, 5vw, 5rem);
+  --size-title: clamp(1.5rem, 2.4vw, 2.25rem);
+  --size-body: clamp(1rem, 1.05vw, 1.15rem);
+  --size-label: 0.72rem;
+
+  /* ---- Legacy role names: kept so every existing page keeps working, remapped onto the brand ------------------ */
+  --page: var(--vault);
+  --surface-1: var(--vault-2);
+  --surface-2: var(--vault-3);
+  --text-primary: var(--paper);
+  --text-secondary: var(--paper-dim);
+  --text-muted: var(--paper-mute);
+  --grid: #212320; /* paper at 10% on vault, solid so it can also fill */
+  --axis: #40413c; /* paper at 24% on vault */
+  --ring: var(--rule);
+  --accent: var(--serial);
+
+  /* ---- Charts: dataviz dark steps, validated on --vault and --vault-2 (scripts/validate_palette.js --mode dark).
+     Slot order is blue, aqua, yellow. The reference slot-2 orange (#d95926) is dropped: it is indistinguishable
+     from --serial (normal-vision ΔE 3.6, deutan 0.2), and serial marks fair value inside charts.
+     Validated sets (all pairs, both surfaces): series-1/2/3 → PASS (worst CVD ΔE 8.4, normal 19.8);
+     series-1/2 + serial → PASS (worst CVD ΔE 9.3, normal 20.9). Never put series-3 and a serial mark in one chart
+     (yellow↔serial fails: ΔE 13.9 normal, 5.0 deutan). */
+  --series-1: #3987e5;
+  --series-2: #199e70;
+  --series-3: #c98500;
+  --div-mid: #383835;
+  --div-pos-1: #184f95;
+  --div-pos-2: #256abf;
+  --div-pos-3: #3987e5;
+  --div-pos-4: #86b6ef;
+  --div-neg-1: #6e2322;
+  --div-neg-2: #a52e2d;
+  --div-neg-3: #e34948;
+  --div-neg-4: #f09c9b;
+
+  /* ---- Status: fixed, reserved, always shipped with an icon + label ---------------------------------------- */
+  --good: #0ca30c;
+  --warning: #fab219;
+  --serious: #ec835a;
+  --critical: #d03b3b;
+  --good-text: #0ca30c;
 }
 
 @theme inline {
+  /* Brand roles: bg-vault, text-paper, text-paper-dim, border-rule, text-serial, bg-serial … */
+  --color-vault: var(--vault);
+  --color-vault-2: var(--vault-2);
+  --color-vault-3: var(--vault-3);
+  --color-paper: var(--paper);
+  --color-paper-dim: var(--paper-dim);
+  --color-paper-mute: var(--paper-mute);
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+  --color-serial: var(--serial);
+  --color-serial-ink: var(--serial-ink);
+
+  /* Legacy roles (existing pages): bg-page, bg-surface-1/2, text-ink, text-ink-2, text-muted, border-grid … */
   --color-page: var(--page);
   --color-surface-1: var(--surface-1);
   --color-surface-2: var(--surface-2);
@@ -55,20 +98,484 @@
   --color-muted: var(--text-muted);
   --color-grid: var(--grid);
   --color-accent: var(--accent);
-  --font-sans: var(--font-geist-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  /* Families: font-display (Bodoni Moda: hero + section titles ONLY), font-body / font-sans (Instrument Sans),
+     font-mono (IBM Plex Mono: tickers, serials, addresses, every number). */
+  --font-display: var(--font-bodoni), "Bodoni Moda", Didot, "Bodoni 72", serif;
+  --font-body: var(--font-instrument), "Instrument Sans", system-ui, sans-serif;
+  --font-sans: var(--font-instrument), "Instrument Sans", system-ui, sans-serif;
+  --font-mono: var(--font-plex), "IBM Plex Mono", ui-monospace, monospace;
+
+  /* Scale: text-hero, text-section, text-title, text-body, text-label */
+  --text-hero: var(--size-hero);
+  --text-hero--line-height: 0.92;
+  --text-hero--letter-spacing: -0.02em;
+  --text-section: var(--size-section);
+  --text-section--line-height: 0.98;
+  --text-section--letter-spacing: -0.02em;
+  --text-title: var(--size-title);
+  --text-title--line-height: 1.1;
+  --text-body: var(--size-body);
+  --text-body--line-height: 1.6;
+  --text-label: var(--size-label);
+  --text-label--line-height: 1.4;
+  --text-label--letter-spacing: 0.08em;
+
+  /* Motion: ease-out / ease-inout utilities use the brand curves. */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-inout: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+/* ==============================================================================================================
+   Base
+   ============================================================================================================== */
+
+@layer base {
+html {
+  background: var(--vault);
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-  background: var(--page);
-  color: var(--text-primary);
-  font-family: var(--font-sans);
+  background: var(--vault);
+  color: var(--paper);
+  font-family: var(--font-body);
+  font-feature-settings: "kern", "liga";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
+::selection {
+  background: var(--serial);
+  color: var(--serial-ink);
+}
+
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--serial);
+  outline-offset: 3px;
+}
+
+/* Every number is Plex Mono, tabular. `.tabular` is the legacy class; `.num` is the brand one. */
+.tabular,
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum", "zero" 0;
+}
+.num {
+  font-family: var(--font-mono);
+}
+}
+
+@layer components {
+/* Legacy card, restyled as a ledger panel: square, hairline, raised one step. Prefer <LedgerPanel>. */
 .card {
-  background: var(--surface-1);
-  border: 1px solid var(--ring);
-  border-radius: 14px;
+  background: var(--vault-2);
+  border: 1px solid var(--rule);
+  border-radius: 0;
+}
 }
 
-.tabular { font-variant-numeric: tabular-nums; }
+/* ==============================================================================================================
+   Type roles (utilities)
+   ============================================================================================================== */
+
+/* Mono label: .72rem Plex Mono, +0.08em, uppercase. */
+@utility label {
+  font-family: var(--font-mono);
+  font-size: var(--size-label);
+  line-height: 1.4;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+/* Condensed Instrument Sans for engraved-style small caps and dense UI. */
+@utility font-condensed {
+  font-stretch: 85%;
+}
+
+/* ==============================================================================================================
+   Engraving utilities (static tiles from /brand; the <Guilloche> component takes custom colours)
+   ============================================================================================================== */
+
+@utility security-border {
+  border: 16px solid transparent;
+  border-image: url("/brand/pattern-security-border.svg") 24 round;
+}
+
+@utility guilloche-rule {
+  height: 12px;
+  background: url("/brand/pattern-divider.svg") repeat-x center / 16px 12px;
+}
+
+@utility hatch {
+  background-image: url("/brand/pattern-hatch.svg");
+  background-size: 6px 6px;
+}
+
+@layer components {
+/* Ledger table: hairline rows, mono tabular numbers, labels in the header. */
+.ledger-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.ledger-table th {
+  font-family: var(--font-mono);
+  font-size: var(--size-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: var(--paper-mute);
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--rule-strong);
+}
+.ledger-table td {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--rule);
+}
+.ledger-table td.n,
+.ledger-table th.n {
+  text-align: right;
+  font-family: var(--font-mono);
+}
+.ledger-table tbody tr:hover td {
+  background: color-mix(in srgb, var(--paper) 3%, transparent);
+}
+
+/* Ruled rows inside a LedgerPanel: a hairline between consecutive children. */
+.ledger-ruled > * + * {
+  border-top: 1px solid var(--rule);
+}
+
+/* ==============================================================================================================
+   Chrome: skip link, film grain
+   ============================================================================================================== */
+
+.skip-link {
+  position: fixed;
+  left: 16px;
+  top: 12px;
+  z-index: 100;
+  padding: 0.6rem 0.9rem;
+  background: var(--serial);
+  color: var(--serial-ink);
+  font-family: var(--font-mono);
+  font-size: var(--size-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transform: translateY(-160%);
+  transition: transform var(--dur-micro) var(--ease-out);
+}
+.skip-link:focus-visible {
+  transform: translateY(0);
+  outline-offset: 2px;
+}
+
+/* Film grain at 4%: fractal noise, grayscale, one fixed layer, never animated, never interactive. */
+.grain {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  pointer-events: none;
+  opacity: 0.04;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .93 0 0 0 0 .9 0 0 0 0 .84 0 0 0 1.5 -.45'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 220px 220px;
+}
+
+/* ==============================================================================================================
+   Components (classes used by components/brand/*)
+   ============================================================================================================== */
+
+/* Button: press = scale .97; guilloché sheen sweeps across on hover and press (0.3s). Transform/opacity only. */
+.dd-btn {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6em;
+  white-space: nowrap;
+  user-select: none;
+  transition:
+    transform var(--dur-micro) var(--ease-out),
+    opacity var(--dur-micro) var(--ease-out);
+  -webkit-tap-highlight-color: transparent;
+}
+.dd-btn:active:not([aria-disabled="true"]):not(:disabled) {
+  transform: scale(0.97);
+}
+.dd-btn::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--dd-sheen) repeat center / 18px 18px;
+  -webkit-mask-image: linear-gradient(100deg, transparent 20%, #000 45%, #000 55%, transparent 80%);
+  mask-image: linear-gradient(100deg, transparent 20%, #000 45%, #000 55%, transparent 80%);
+  opacity: 0;
+  transform: translateX(-110%);
+}
+.dd-btn:hover::after,
+.dd-btn:active::after {
+  animation: dd-sheen 0.3s var(--ease-inout) both;
+}
+@keyframes dd-sheen {
+  0% {
+    opacity: 1;
+    transform: translateX(-110%);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(110%);
+  }
+}
+.dd-btn:disabled,
+.dd-btn[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.dd-btn--primary {
+  --dd-sheen: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 18 18'%3E%3Cg fill='none' stroke='%230a0d0c' stroke-opacity='.35' stroke-width='.6'%3E%3Cpath d='M0 4.5c2.25-3 4.5-3 6.75 0s4.5 3 6.75 0 4.5-3 4.5-3M0 9c2.25-3 4.5-3 6.75 0s4.5 3 6.75 0 4.5-3 4.5-3M0 13.5c2.25-3 4.5-3 6.75 0s4.5 3 6.75 0 4.5-3 4.5-3'/%3E%3C/g%3E%3C/svg%3E");
+  background: var(--serial);
+  color: var(--serial-ink);
+}
+.dd-btn--ghost {
+  --dd-sheen: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 18 18'%3E%3Cg fill='none' stroke='%23ede6d6' stroke-opacity='.22' stroke-width='.6'%3E%3Cpath d='M0 4.5c2.25-3 4.5-3 6.75 0s4.5 3 6.75 0 4.5-3 4.5-3M0 9c2.25-3 4.5-3 6.75 0s4.5 3 6.75 0 4.5-3 4.5-3M0 13.5c2.25-3 4.5-3 6.75 0s4.5 3 6.75 0 4.5-3 4.5-3'/%3E%3C/g%3E%3C/svg%3E");
+  color: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--rule-strong);
+  transition:
+    transform var(--dur-micro) var(--ease-out),
+    box-shadow var(--dur-micro) var(--ease-out);
+}
+.dd-btn--ghost:hover {
+  box-shadow: inset 0 0 0 1px var(--paper-dim);
+}
+.dd-btn--link {
+  color: var(--paper);
+  text-decoration: underline;
+  text-decoration-color: var(--rule-strong);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.3em;
+  overflow: visible;
+}
+.dd-btn--link::after {
+  display: none;
+}
+.dd-btn--link:hover {
+  text-decoration-color: var(--paper);
+}
+
+/* Seal draw-on: layers engrave in from the rim to the Δ. Transform/opacity only; reduced motion = none. */
+.dd-seal-draw .dd-seal-layer {
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+  animation: dd-seal-layer var(--dur-page) var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * var(--stagger));
+}
+@keyframes dd-seal-layer {
+  from {
+    opacity: 0;
+    transform: rotate(-18deg) scale(0.96);
+  }
+}
+.dd-seal-draw .dd-seal-stroke {
+  transform-box: view-box;
+  transform-origin: 50% 58%;
+  animation: dd-seal-stroke var(--dur-reveal) var(--ease-out) both;
+  animation-delay: calc(0.4s + var(--i, 0) * var(--stagger));
+}
+@keyframes dd-seal-stroke {
+  from {
+    opacity: 0;
+    transform: scale(1.08);
+  }
+}
+
+/* Stamp toast: the engraved stamp presses onto the page, holds, lifts. */
+.dd-stamp-enter {
+  animation: dd-stamp-in 0.42s var(--ease-out) both;
+}
+.dd-stamp-exit {
+  animation: dd-stamp-out 0.36s var(--ease-inout) both;
+}
+@keyframes dd-stamp-in {
+  0% {
+    opacity: 0;
+    transform: scale(1.4) rotate(-10deg);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(0.96) rotate(-4deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(-4deg);
+  }
+}
+@keyframes dd-stamp-out {
+  to {
+    opacity: 0;
+    transform: scale(0.98) rotate(-4deg) translateY(8px);
+  }
+}
+
+/* Reveal: pre-hidden only when scripts run and motion is allowed, so text is never lost without JS. */
+@media (scripting: enabled) and (prefers-reduced-motion: no-preference) {
+  [data-reveal="pending"] {
+    visibility: hidden;
+  }
+}
+.dd-reveal-line {
+  display: block;
+}
+
+/* Mobile certificate sheet */
+.dd-sheet-enter {
+  animation: dd-fade-in var(--dur-micro) var(--ease-out) both;
+}
+.dd-sheet-row {
+  animation: dd-rise var(--dur-reveal) var(--ease-out) both;
+  animation-delay: calc(0.06s + var(--i, 0) * var(--stagger) * 0.6);
+}
+@keyframes dd-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes dd-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+}
+
+/* ==============================================================================================================
+   Page transitions (React <ViewTransition>, see app/template.tsx and components/nav/RouteTransition.tsx)
+   ============================================================================================================== */
+
+::view-transition {
+  pointer-events: none;
+}
+/* React leaves the root uncaptured, so the footer is named: it waits for the new page instead of showing through
+   the old one when the page height changes. */
+::view-transition-group(site-footer) {
+  animation: none;
+}
+::view-transition-old(site-footer) {
+  display: none;
+}
+::view-transition-new(site-footer) {
+  animation: dd-fade-in 0.5s var(--ease-out) 0.36s both;
+}
+/* The nav is the fixed reference while the certificate beneath it changes. */
+::view-transition-group(site-nav) {
+  animation: none;
+  z-index: 100;
+}
+::view-transition-old(site-nav) {
+  display: none;
+}
+::view-transition-new(site-nav) {
+  animation: none;
+}
+/* The nav seal stamps each new page. */
+::view-transition-group(site-seal) {
+  z-index: 101;
+}
+::view-transition-old(site-seal) {
+  display: none;
+}
+::view-transition-new(site-seal) {
+  animation: dd-seal-press 0.6s var(--ease-inout) both;
+}
+@keyframes dd-seal-press {
+  45% {
+    transform: scale(0.84);
+  }
+}
+/* Outgoing certificate lifts and fades; the incoming one rises in. */
+::view-transition-old(.page-exit) {
+  animation:
+    dd-page-lift 0.6s var(--ease-out) both,
+    dd-fade-out 0.32s var(--ease-out) both;
+}
+::view-transition-new(.page-enter) {
+  animation:
+    dd-page-rise 0.8s var(--ease-out) 0.22s both,
+    dd-fade-in 0.5s var(--ease-out) 0.22s both;
+}
+@keyframes dd-page-lift {
+  to {
+    transform: translateY(-28px);
+  }
+}
+@keyframes dd-page-rise {
+  from {
+    transform: translateY(36px);
+  }
+}
+/* Page titles are shared elements: the title re-engraves in place. */
+::view-transition-group(.title-morph) {
+  animation-duration: 0.6s;
+  animation-timing-function: var(--ease-out);
+}
+::view-transition-old(.title-morph) {
+  animation: dd-fade-out 0.3s var(--ease-out) both;
+}
+::view-transition-new(.title-morph) {
+  animation: dd-fade-in 0.5s var(--ease-out) 0.1s both;
+}
+@keyframes dd-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* ==============================================================================================================
+   Lenis (only mounted on / and /brand)
+   ============================================================================================================== */
+
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+.lenis:not(.lenis-autoToggle).lenis-stopped {
+  overflow: clip;
+}
+.lenis [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+.lenis.lenis-smooth iframe {
+  pointer-events: none;
+}
+
+/* ==============================================================================================================
+   Reduced motion: everything instant, no view-transition movement.
+   ============================================================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+    scroll-behavior: auto !important;
+  }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+  .dd-btn:active {
+    transform: none;
+  }
+}
