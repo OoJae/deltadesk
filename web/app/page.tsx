@@ -1,3 +1,4 @@
+import FlowXray, { type FlowRow } from "@/components/FlowXray";
 import StudyView, { type PoolStudy } from "@/components/StudyView";
 import { table, type Row } from "@/lib/api";
 import { POOLS, usd } from "@/lib/format";
@@ -7,9 +8,10 @@ export const dynamic = "force-dynamic";
 const n = (v: Row[string]) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
 export default async function StudyPage() {
-  const [hlPool, hlRegime, hlHow, m0Pool, m0Regime, m0How] = await Promise.all([
+  const [hlPool, hlRegime, hlHow, m0Pool, m0Regime, m0How, flowLabel, flowConc] = await Promise.all([
     table("hl_ref", "by_pool"), table("hl_ref", "by_regime"), table("hl_ref", "by_how"),
     table("m0", "by_pool"), table("m0", "by_regime"), table("m0", "by_how"),
+    table("flow", "by_label"), table("flow", "concentration"),
   ]);
   if (!m0Pool.ok) {
     return <main className="mx-auto max-w-5xl p-8 text-ink-2">The study is still being computed ({m0Pool.error}). Try again in a few minutes.</main>;
@@ -61,6 +63,13 @@ export default async function StudyPage() {
   const totalVol = pools.reduce((a, p) => a + p.vol, 0);
   const totalSwaps = pools.reduce((a, p) => a + p.swaps, 0);
 
+  const flow: FlowRow[] = rowsOf(flowLabel).map((r) => ({
+    label: String(r.label), takers: n(r.takers) ?? 0, feeShare: n(r.fee_share) ?? 0, pickedShare: n(r.picked_pos_share_hl_1h) ?? 0,
+    fees: n(r.fee_usd) ?? 0, pickedNet: n(r.picked_hl_1h) ?? 0, edge: n(r.edge_hl_1h),
+  }));
+  const ops = rowsOf(flowConc).find((r) => r.scope === "NVDA/USDG" && r.horizon === "1h" && r.level === "operator");
+  const arb = flow.find((r) => r.label === "HL-arb");
+
   return (
     <main className="mx-auto w-full max-w-5xl space-y-8 px-4 py-10">
       <header className="space-y-4">
@@ -85,6 +94,32 @@ export default async function StudyPage() {
       </header>
 
       <StudyView pools={pools} />
+
+      {flow.length > 0 && (
+        <section className="card space-y-5 p-5">
+          <div className="space-y-2">
+            <p className="text-xs font-medium uppercase tracking-wider text-muted">Flow X-ray · who takes LP money</p>
+            {ops && n(ops.top3_net) != null && (
+              <h2 className="max-w-3xl text-xl font-semibold leading-snug">
+                Three bot operators account for {((n(ops.top3_net) ?? 0) * 100).toFixed(1)}% of what NVDA/USDG LPs lose, on net, to informed flow.
+                The other {((n(ops.n) ?? 0) - 3).toLocaleString()} traders together took {(100 - (n(ops.top3_net) ?? 0) * 100).toFixed(1)}%.
+              </h2>
+            )}
+            {arb && (
+              <p className="max-w-3xl text-sm text-ink-2">
+                Bots that trade the pool toward Hyperliquid&apos;s 24/7 price pay {(arb.feeShare * 100).toFixed(0)}% of LP fees but take{" "}
+                {(arb.pickedShare * 100).toFixed(0)}% of all value picked off: for every $1 of fees they pay, they take ${arb.edge ? (1 / arb.edge).toFixed(2) : "–"}.
+                Retail and aggregator flow does the opposite: it pays fees and, on net, loses on price too.
+              </p>
+            )}
+          </div>
+          <FlowXray rows={flow} />
+          <p className="text-xs text-muted">
+            Every swap is joined to the wallet that sent it; bot wallets that share a private router contract are grouped as one operator. Labels are deterministic
+            rules (Hyperliquid lead, 5-minute win rate, frequency), not a model. Net shares are on the pool&apos;s own price 1 hour later.
+          </p>
+        </section>
+      )}
 
       <section className="grid gap-4 text-sm text-ink-2 md:grid-cols-2">
         <div className="card space-y-2 p-5">

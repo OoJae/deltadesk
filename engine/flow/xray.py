@@ -294,7 +294,16 @@ def write(res: Result) -> None:
      .sort(["pool", "block", "log_index"])
      .write_parquet(io.OUT / "swap_flow.parquet"))
     (io.OUT / "meta.json").write_text(json.dumps(res.meta, indent=2, default=str))
+    concentration_table(res.meta).write_parquet(io.OUT / "concentration.parquet")
     (io.OUT / "flow_summary.md").write_text(render(res))
+
+
+def concentration_table(meta: dict) -> pl.DataFrame:
+    """meta['concentration'] flattened for the public API: one row per (scope, horizon, level)."""
+    return pl.DataFrame([
+        {"scope": scope, "horizon": hz, "level": level, **{k: v for k, v in c.items() if k != "top3"}, "top3": ", ".join(c["top3"])}
+        for scope, by_hz in meta["concentration"].items() for hz, by_level in by_hz.items() for level, c in by_level.items()
+    ])
 
 
 def main() -> None:

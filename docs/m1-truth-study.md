@@ -41,15 +41,16 @@
 - **Coverage.** 100% of 3,344,479 swaps are joined to their originating wallet (`tx.from`): 161,210 wallets.
 - **Labels.** Deterministic, with thresholds in `flow/labels.py`. HL-arb and informed-bot are judged per *operator*, i.e. the wallet fleet behind a private router.
 
-| Label | Wallets | Fee share | Share of positive picked-off (1h) | Edge vs HL 1h |
-|---|---|---|---|---|
-| HL-arb | 887 | 37.0% | **66.3%** | **0.47** |
-| Informed bot | 819 | 2.6% | 3.7% | 0.55 |
-| Retail | 126,618 | 15.1% | 11.6% | LPs gain on price |
-| Aggregator / shared router | 32,286 | 38.8% | n/a | LPs gain on price |
-| JIT-LP | 4 | 0.1% | 0.3% | 0.50 |
+| Label | Wallets | Fee share | Share of positive picked-off (vs HL, 1h) | Net picked-off (vs HL, 1h) | Edge vs HL 1h |
+|---|---|---|---|---|---|
+| HL-arb | 887 | 37.0% | **66.6%** | +$392.3k | **0.47** |
+| Informed bot | 819 | 2.6% | 3.7% | +$23.4k | 0.55 |
+| JIT-LP | 4 | 0.1% | 0.2% | +$1.2k | 0.50 |
+| Bot / other | 596 | 6.2% | 1.8% | −$34.2k | LPs gain on price |
+| Aggregator / shared router | 32,286 | 38.8% | 16.0% | −$41.0k | LPs gain on price |
+| Retail | 126,618 | 15.1% | 11.7% | −$5.7k | LPs gain on price |
 
-- **The top three operators** each take about 15% of all positive picked-off:
+- **The top three operators** take $91–100k each of 1h picked-off (NVDA/USDG top-3 by operator: 98.6% of net, 52.6% of positive picked-off):
   - router `0x520e…a7aa`: 20 wallets, $90M volume, 1m HL lead 0.64 (z 23);
   - router `0xf7f7…bb78`: 1 wallet, $126M volume, 1m HL lead 0.74;
   - router `0x1e8e…b492`: 300 wallets.

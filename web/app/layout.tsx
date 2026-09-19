@@ -23,14 +23,14 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col">
         <nav className="sticky top-0 z-10 border-b border-grid bg-page/90 backdrop-blur">
-          <div className="mx-auto flex w-full max-w-5xl items-center justify-between px-4 py-3">
-            <Link href="/" className="flex items-center gap-2 font-semibold">
+          <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-3">
+            <Link href="/" className="flex shrink-0 items-center gap-2 font-semibold">
               <svg width="22" height="22" viewBox="0 0 64 64" aria-hidden><rect width="64" height="64" rx="14" fill="var(--surface-2)" /><path d="M14 44 L26 30 L34 38 L50 20" stroke="var(--accent)" strokeWidth="6" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
               DeltaDesk
             </Link>
-            <div className="flex gap-1 text-sm">
+            <div className="-mx-2 flex text-sm sm:mx-0 sm:gap-1">
               {NAV.map((n) => (
-                <Link key={n.href} href={n.href} className="rounded-lg px-3 py-1.5 text-ink-2 hover:bg-surface-2 hover:text-ink">{n.label}</Link>
+                <Link key={n.href} href={n.href} className="whitespace-nowrap rounded-lg px-2 py-1.5 text-ink-2 hover:bg-surface-2 hover:text-ink sm:px-3">{n.label}</Link>
               ))}
             </div>
           </div>
