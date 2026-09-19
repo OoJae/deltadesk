@@ -35,10 +35,10 @@ STEPS = [
     ("hl_ref", ["markout.hl_ref"], 0),
     ("positions", ["positions.attribute"], 3600),
     ("league", ["league.build"], 3600),
-    # Base first (small ranges), then the long Robinhood swap-sender backfill. base_npm_transfers is left out: a
-    # Transfer-topic scan on Base is slow, and owners come from the mint tx (base_aero_lp_txs) plus gauge events.
-    ("hyper_sync_heavy", ["indexer.hs_backfill", "base_aero_nvda", "base_aero_gauge", "base_aero_usdc", "base_aero_lp_txs",
-                          "base_aero_swap_txs", "swap_txs"], 1800),
+    # Base first (address-only scans; topic-filtered or JOIN_ALL queries crawl on Base), then the long Robinhood
+    # swap-sender backfill.
+    ("hyper_sync_heavy", ["indexer.hs_backfill", "base_aero_nvda", "base_aero_gauge", "base_aero_usdc", "base_npm",
+                          "base_aero_txs", "swap_txs"], 1800),
     ("aero_study", ["aero.study"], 3600),          # Base: NVDAc/USDC pool study, emissions, voter fee split
     ("aero_positions", ["aero.positions"], 3600),  # Base: staked / unstaked tearsheets
     ("flow", ["flow.xray"], 3600),

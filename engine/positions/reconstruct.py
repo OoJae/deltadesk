@@ -68,18 +68,19 @@ POOL_BY_KEY = {p.key: p for p in POOLS}
 @dataclass(frozen=True)
 class ChainCfg:
     npm: str             # v3-style NonfungiblePositionManager
-    lp_txs: str          # raw source holding the NPM logs + txs of every LP tx (JOIN_ALL on the pool's LP events)
+    npm_logs: str        # raw source holding the NPM Increase/Decrease/Collect logs of the pool's LP txs
+    txs: str             # raw source holding the LP txs (tx_*.parquet: from, gas)
     npm_transfers: str   # raw source holding the NPM Transfer logs
     npm_pool_owners: tuple[str, ...] = ()  # pool-level owners whose Mint/Burn/Collect are NPM-managed (besides the NPM)
 
 
 CHAINS = {
-    "robinhood": ChainCfg(NPM, "lp_txs", "npm_transfers"),
-    # Aerodrome Slipstream NPM (equity pools). Transfers come from the LP txs themselves (mint → holder, gauge
-    # deposit / withdraw): a Transfer-topic scan of the NPM on Base is too slow; wallet-to-wallet NFT moves are missed.
+    "robinhood": ChainCfg(NPM, "lp_txs", "lp_txs", "npm_transfers"),
+    # Aerodrome Slipstream NPM (equity pools): all of its logs (base_npm; other pools' events never link to our pool's
+    # Mint/Burn and Transfers are filtered by tokenId), txs of every pool / gauge log (base_aero_txs).
     # For a STAKED tokenId the NPM mints / burns / collects with the gauge as the pool-level owner (NPM source:
     # addLiquidity recipient = gauge, burn/collect(..., gauge)), so gauge-owned pool events are NPM-managed too.
-    "base": ChainCfg("0xe1f8cd9ac4e4a65f54f38a5cdafca44f6dd68b53", "base_aero_lp_txs", "base_aero_lp_txs",
+    "base": ChainCfg("0xe1f8cd9ac4e4a65f54f38a5cdafca44f6dd68b53", "base_npm", "base_aero_txs", "base_npm",
                      npm_pool_owners=("0x30d1e5af5ce39863e6f69a1f73ffb0e1ac9771a8",)),
 }
 
@@ -277,7 +278,7 @@ def reconstruct_v3(pool: Pool) -> PoolPositions:
     npm = cfg.npm
     npm_owned = {npm, *cfg.npm_pool_owners}
     plog = load_logs(pool.source, address=pool.pool_id, topic0=[T_V3_MINT, T_V3_BURN, T_V3_COLLECT])
-    nlog = load_logs(cfg.lp_txs, address=npm, topic0=[T_NPM_INC, T_NPM_DEC, T_NPM_COLLECT])
+    nlog = load_logs(cfg.npm_logs, address=npm, topic0=[T_NPM_INC, T_NPM_DEC, T_NPM_COLLECT])
     allev = pl.concat([plog, nlog], how="diagonal_relaxed").sort("ord")
     cols = ["ord", "block", "tx_index", "log_index", "tx_hash", "ts", "address", "topic0", "topic1", "topic2", "topic3", "data"]
 
@@ -478,7 +479,7 @@ def _nft_transfers(source: str, address: str, pool: Pool, ids: dict[int, str]) -
 
 
 def _finish(pool: Pool, events: pl.DataFrame, collects: pl.DataFrame, transfers: pl.DataFrame, touches: pl.DataFrame, diag: dict) -> PoolPositions:
-    txs = load_txs(CHAINS[pool.chain].lp_txs).select("tx_hash", "from")
+    txs = load_txs(CHAINS[pool.chain].txs).select("tx_hash", "from")
     op = (touches.join(txs, on="tx_hash", how="left").group_by("pos_id", "from").len()
           .sort(["pos_id", "len", "from"], descending=[False, True, False]).group_by("pos_id").first()
           .select("pos_id", pl.col("from").alias("operator")))

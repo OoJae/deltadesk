@@ -172,7 +172,7 @@ def run() -> dict:
         (pl.col("realized_fee0") - pl.col("fee0")).alias("residual0"), (pl.col("realized_fee1") - pl.col("fee1")).alias("residual1"),
     ).with_columns((pl.col("residual0") / d0 * pl.col("end_u0") + pl.col("residual1") / d1 * pl.col("end_u1")).alias("residual_usd"))
 
-    gas = gas_by_position(pp.touches, CHAINS["base"].lp_txs)
+    gas = gas_by_position(pp.touches, CHAINS["base"].txs)
     pos = finalize(pos.join(gas, on="pos_id", how="left"))
     # AERO is LP income: add it to net / vs-HODL and their normalisations
     per_k = 1000.0 / pl.col("avg_notional_usd")
