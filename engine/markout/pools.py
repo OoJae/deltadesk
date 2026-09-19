@@ -27,6 +27,7 @@ DATA = Path(__file__).resolve().parents[2] / "data"
 V3_SWAP = "0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67"
 V4_SWAP = "0x40e9cecb9f5f1f1c5b9c97dec2917b7ee92e57ba5563708daca94dd84ad7112f"
 V3_SET_FEE_PROTOCOL = "0x973d8d92bb299f4af6ce49b52a8adb85ae46b9f214c4c4fc06ac77401237b133"
+USD_QUOTES = ("USDG", "USDC")  # dollar stablecoins; the other quote (SPY) is roughly $700
 
 
 @dataclass(frozen=True)
@@ -50,6 +51,13 @@ POOLS = [
     Pool("TSLA/USDG", "v4_pools", "v4", "0x8517f8071ae5b831b738052f12125e8e3d6c158b78728aa44ce3b25e5104d32e", "TSLA", "USDG", True, 18, 6, 3000),
     # QQQ/SPY: SPY (0x117c…) sorts before QQQ (0xD5f3…), so currency0 = SPY, currency1 = QQQ. Base = QQQ, quote = SPY.
     Pool("QQQ/SPY", "v4_pools", "v4", "0x8493982435e4273028008cd181c84c0d6a548f96792fdb5acddcbb6a8c82d305", "QQQ", "SPY", False, 18, 18, 200),
+]
+
+# Base (8453). Aerodrome Slipstream emits Uniswap v3 Swap events, so it decodes as "v3" with no protocol cut; the
+# staked/unstaked fee split (staked liquidity's fees go to the gauge, unstaked keeps 1 - unstakedFee) is applied
+# downstream (aero/). token0 = USDC (6), token1 = NVDAc (B20, 8 decimals).
+BASE_POOLS = [
+    Pool("NVDAc/USDC", "base_aero_nvda", "v3", "0x853f5f1b92b16714fe6cda67caad0856b83c7ab9", "NVDA", "USDC", False, 6, 8, 500),
 ]
 
 
@@ -156,7 +164,7 @@ def _decode_chunk(pool: Pool, sel: pl.DataFrame, sender_col: str, fp: tuple[np.n
         x0 = a0 / 10**pool.dec0
         x1 = a1 / 10**pool.dec1
         base_pool, quote_pool = (x0, x1) if pool.base_is_0 else (x1, x0)
-        if base_pool == 0 or quote_pool == 0 or abs(quote_pool) * (1 if pool.quote == "USDG" else 700) < 0.01:
+        if base_pool == 0 or quote_pool == 0 or abs(quote_pool) * (1 if pool.quote in USD_QUOTES else 700) < 0.01:
             continue  # dust: sub-cent swaps carry rounding-dominated prices
         s = 1 if base_pool < 0 else -1  # pool paid out base → taker bought base
         q = abs(base_pool)

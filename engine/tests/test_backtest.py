@@ -403,7 +403,8 @@ def test_lag0_equals_hl_ref_gap(nvda_real):
     j = (sw.with_columns(s["gap_bps"]).join(hm, on=["block", "tx_index", "log_index"], how="left")
          .filter(pl.col("ts") > _ts(2026, 9, 8, 16, 0)))
     assert j.height > 500_000
-    assert j.select((pl.col("gap_bps") - pl.col("gap_pre_bps")).abs().max()).item() == 0.0
+    # identical computation; only libm ulp noise when hl_markouts was written on another platform (e.g. the Linux server)
+    assert j.select((pl.col("gap_bps") - pl.col("gap_pre_bps")).abs().max()).item() < 1e-9
 
 
 @pytest.mark.parametrize("ref_kind,lag", [("fine", 0.0), ("fine", 1.0), ("fine", 5.0), ("15m", 0.0)])
@@ -430,7 +431,7 @@ def test_pipeline_decisions_ignore_outcome_columns():
     df = G.load_inputs(pools=["SPY/USDG"])
     refs = G.build_refs()
     df, _, checks = G.add_states(df, {k: {"SPY/USDG": v["SPY/USDG"]} for k, v in refs.items()})
-    assert checks["SPY/USDG"]["max_abs_gap_diff_bps"] == 0.0 and checks["SPY/USDG"]["ok_flag_mismatches"] == 0
+    assert checks["SPY/USDG"]["max_abs_gap_diff_bps"] < 1e-9 and checks["SPY/USDG"]["ok_flag_mismatches"] == 0
     post = ["mid_after", "vol_usd", "fee_usd", "picked_usd_1h", "picked_hl_1h", "picked_hl_5m", "net"]
     df2 = df.with_columns([(pl.col(c) * -3.0 + 1.0) for c in post] + [~pl.col("valid_1h"), ~pl.col("valid_hl_1h"), ~pl.col("valid_hl_5m")])
     phi = _phi(10.0, pool="SPY/USDG")

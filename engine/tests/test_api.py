@@ -74,3 +74,15 @@ def test_public_study_tables_are_aggregates_only(tmp_path, monkeypatch):
     assert c.get("/study/table/flow/takers").status_code == 404
     assert c.get("/study/table/flow/new_rowlevel").status_code == 404
     assert c.get("/study/tables").json()["flow"] == ["by_label"]
+
+
+def test_hl_candles_merge_keeps_history_and_prefers_fresh():
+    import polars as pl
+
+    from indexer.hl_candles import merge
+
+    old = pl.DataFrame({"t_open_ms": [1, 2, 3], "c": [10.0, 20.0, 30.0]})
+    new = pl.DataFrame({"t_open_ms": [3, 4], "c": [31.0, 40.0]})     # candle 3 was still forming in the old fetch
+    m = merge(old, new)
+    assert m["t_open_ms"].to_list() == [1, 2, 3, 4]                   # old history (1, 2) survives
+    assert m.filter(pl.col("t_open_ms") == 3)["c"].item() == 31.0     # fresh value wins
