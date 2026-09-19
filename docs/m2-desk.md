@@ -114,6 +114,24 @@ settings: invariants I1/I8 on local and fork campaigns, `contracts/reports/`) an
 encode a transfer. Feedback for Dynamic: support chain 4663 in policies, and surface a denial as a policy error rather than
 a dropped signing session.
 
+## 3b · The agent's first live on-chain decision (Sat 2026-09-19 15:45 UTC)
+
+With the desk switched to **copilot** (mode message signed by the Vault) and desk-agent armed (`DESK_ARM=1`,
+`DRY_RUN=false`, `DESK_SIGNAL_AUTO=0`), the agent proposed its first gate signal, the owner approved it on `/desk/<lane>`,
+and the delegated Operator signed it through Dynamic and broadcast it:
+
+| Field | Value |
+|---|---|
+| Tx | [`0xddbc1b92…7375`](https://robinhoodchain.blockscout.com/tx/0xddbc1b92b20332ddee6e2ec587e27246021c42b2b51444e848fab7e0d4fe7375), block 67,199,987, status 1, 58,856 gas |
+| From → to | Operator `0x8662…3678` → lane `0x7f89…d662`, `signal(Meta)` (selector `0xb34b20a9`), value 0 |
+| `LaneAction` | action 8 (SIGNAL), decisionId `0x01a0ba57…` (ULID `01M2X5FXVVWKW3THGG1W9A5WZX`), regime 4 (WEEKEND_DARK), gatesMask `0b1001` (CLOSED + STALE-REF), caller = Operator |
+| `reasonHash` | `0x90023d03e9b399a0b945fee8cee1eae0069a3aeb4088cb27eee85b192a4a7314` |
+| Preimage (agent DB `gate_signals`) | `{"at":1789832630302,"from":null,"lane":"0x7f8968734e613f509991d3392074cf7f1e4bd662","source":"initial","to":{"gates":["CLOSED","STALE-REF"],"regime":"WEEKEND_DARK"}}` |
+| Check | `cast keccak '<preimage>'` = the on-chain `reasonHash` |
+
+The agent reconciled the LaneAction as its own (decision `executed`, execution `confirmed`); the watchdog's cross-check route
+knows the decisionId. Every later regime or gate change on this lane is announced the same way (≤ 6 per hour, 60 s dwell).
+
 ## 4 · The live mint (~$50, copilot)
 
 Run in a regular session, 10:00–15:30 ET, outside 09:20–09:45, with the desk in copilot and armed (`DRY_RUN=false`,
