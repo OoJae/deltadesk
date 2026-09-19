@@ -140,7 +140,7 @@ export default {
       card(
         `<div class="wrap" style="padding:40px 80px 100px;gap:14px">
           <div><div class="eyebrow">${view.eyebrow}</div>
-          <h1 style="font-size:31px;line-height:1.18;font-weight:600;margin-top:8px;max-width:1120px">${view.h1}</h1>
+          <h1 style="font-size:32px;line-height:1.16;margin-top:8px;max-width:1120px">${view.h1}</h1>
           ${view.sub ? `<p style="font-size:17px;color:var(--ink-2);margin-top:6px">${view.sub}</p>` : ""}</div>
           <div class="fade" style="flex:1;min-height:0">${view.inner}</div>
         </div>`,
@@ -150,7 +150,7 @@ export default {
 .pf th{text-align:left;font-weight:600;padding:8px 14px;background:var(--surface-2);color:var(--ink-2);font-size:13px;letter-spacing:.04em;text-transform:uppercase}
 .pf td{padding:8px 14px;border-top:1px solid var(--grid);vertical-align:top}
 .pf td:first-child{width:52%}
-.pf tr.den td{background:rgba(27,175,122,.10)} .pf tr.den td:first-child{box-shadow:inset 4px 0 0 #0a7f4f}
+.pf tr.den td{background:rgba(27,175,122,.10)} .pf tr.den td:first-child{box-shadow:inset 4px 0 0 #2fbf71}
 .pf tr.gap td{background:rgba(250,178,25,.10)}`,
         },
       ),

@@ -13,5 +13,9 @@
   "LaneAction": "lane action",
   "\\brerange\\b": "re-range",
   "Blockscout": "Block scout",
-  "on-chain": "on chain"
+  "on-chain": "on chain",
+  "\\$1k": "one-thousand-dollar",
+  "\\$4\\.24": "four dollars twenty-four",
+  "\\$3\\.32": "three dollars thirty-two",
+  "\\bpm\\b": "P M"
 }

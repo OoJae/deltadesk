@@ -26,6 +26,9 @@ export default {
       await s.click(target.locator(`a[href*="${cfg.tearsheetWallet}"]`).first(), { ms: 700 });
       await page.waitForURL(/\/tearsheet/, { timeout: 60000 });
       await page.locator(ready).first().waitFor({ timeout: 60000 });
+      // the caption bar follows the click-through (it keeps the URL it was painted with)
+      const w = cfg.tearsheetWallet;
+      await s.bar({ url: `${cfg.webUrl.replace(/^https?:\/\//, "")}/tearsheet?wallet=${w.slice(0, 6)}…${w.slice(-4)}&as=${cfg.tearsheetRole}` });
       await page.evaluate(() => document.fonts?.ready).catch(() => {});
       await s.syncCursor();
     } else {

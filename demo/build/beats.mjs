@@ -88,7 +88,7 @@ export function loadBeats(cfg = loadConfig()) {
   return beats;
 }
 
-const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
+const fmt = (s) => `${Math.floor(Math.round(s) / 60)}:${String(Math.round(s) % 60).padStart(2, "0")}`;
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const beats = loadBeats();

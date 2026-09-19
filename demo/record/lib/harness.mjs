@@ -8,14 +8,15 @@ const VIDEO = { width: 1920, height: 1080 };
 
 // Injected into every document (init script) and re-applied after setContent. Idempotent.
 function overlayScript(o) {
-  const Z = o.zoom || 1;
+  const Z = o.zoom || 1; // chrome (caption bar, badges, tags)
+  const PZ = o.pageZoom || Z; // the page itself (body zoom); a scene can lay a page out at its native size
   const apply = () => {
     if (!document.body || document.getElementById("dd-overlay-style")) return;
     const root = document.documentElement; // overlays live outside the zoomed <body>
     const st = document.createElement("style");
     st.id = "dd-overlay-style";
     st.textContent = `
-body{zoom:${Z}}
+body{zoom:${PZ}}
 #dd-bar,#dd-replay{zoom:${Z}}
 #dd-cursor{position:fixed;left:0;top:0;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:50%;
   background:rgba(250,178,25,.28);border:3.5px solid rgba(250,178,25,.95);box-shadow:0 0 0 7px rgba(250,178,25,.12);
@@ -36,6 +37,8 @@ body{zoom:${Z}}
 #dd-replay{position:fixed;top:74px;right:22px;z-index:2147483644;background:#fab219;color:#1a1400;border-radius:10px;
   padding:9px 14px;font:700 15px/1.2 "Geist",system-ui,sans-serif;letter-spacing:.1em;box-shadow:0 6px 24px rgba(0,0,0,.18)}
 #dd-replay small{display:block;font-weight:500;letter-spacing:.01em;font-size:12px;margin-top:2px}
+#dd-replay.inline{display:flex;align-items:baseline;gap:10px;padding:8px 13px}
+#dd-replay.inline small{display:inline;margin-top:0}${o.replayCss ? `\n#dd-replay{${o.replayCss}}` : ""}
 #dd-tag{position:fixed;top:74px;right:22px;z-index:2147483644;background:rgba(11,11,11,.9);color:#f3f2ee;border-radius:10px;zoom:${Z};
   padding:10px 14px;font:600 15px/1.3 "Geist",system-ui,sans-serif;max-width:560px;box-shadow:0 6px 24px rgba(0,0,0,.2);border-left:4px solid #fab219}
 #dd-tag small{display:block;font-weight:400;font-size:12.5px;color:#cfcdc6;margin-top:3px}
@@ -69,6 +72,7 @@ body{zoom:${Z}}
     if (o.mode === "REPLAY") {
       const rb = document.createElement("div");
       rb.id = "dd-replay";
+      if (o.replayInline) rb.className = "inline";
       rb.innerHTML = `REPLAY<small></small>`;
       rb.querySelector("small").textContent = o.replayNote || "historical data, not live";
       root.appendChild(rb);
@@ -173,6 +177,7 @@ export async function recordScene(browser, { cfg, beat, outDir, overlay = {} }, 
     cfg,
     beat,
     duration: beat.duration,
+    stamp, // recording time, "YYYY-MM-DD HH:MM UTC", for relabelled LIVE bars
     log: (...a) => console.log(`  [${beat.id}]`, ...a),
     ph: (k) => (cfg.placeholders?.[k] ?? "").trim(),
 
@@ -312,8 +317,9 @@ export async function recordScene(browser, { cfg, beat, outDir, overlay = {} }, 
       await page.mouse.up();
     },
 
-    // Eased scroll so that `target` (selector | locator | y) sits `offset` px below the top.
-    async scrollTo(target, { ms = 1200, offset = 96 } = {}) {
+    // Eased scroll so that `target` (selector | locator | y) sits `offset` px below the top. ease: "inout" (default),
+    // "linear" (constant speed: scroll-driven animations play at an even pace) or "out".
+    async scrollTo(target, { ms = 1200, offset = 96, ease = "inout" } = {}) {
       let y;
       if (typeof target === "number") y = target;
       else {
@@ -322,11 +328,11 @@ export async function recordScene(browser, { cfg, beat, outDir, overlay = {} }, 
         y = await loc.evaluate((el, off) => el.getBoundingClientRect().top + window.scrollY - off * (parseFloat(getComputedStyle(document.body).zoom) || 1), offset);
       }
       await page.evaluate(
-        ({ y, ms }) =>
+        ({ y, ms, ease }) =>
           new Promise((resolve) => {
             const max = document.documentElement.scrollHeight - innerHeight;
             const to = Math.max(0, Math.min(max, y)), from = scrollY, t0 = performance.now();
-            const e = (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
+            const e = ease === "linear" ? (k) => k : ease === "out" ? (k) => 1 - Math.pow(1 - k, 3) : (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
             const step = (t) => {
               const k = Math.min(1, (t - t0) / ms);
               scrollTo(0, from + (to - from) * e(k));
@@ -334,7 +340,7 @@ export async function recordScene(browser, { cfg, beat, outDir, overlay = {} }, 
             };
             requestAnimationFrame(step);
           }),
-        { y, ms },
+        { y, ms, ease },
       );
       await sleep(120);
     },

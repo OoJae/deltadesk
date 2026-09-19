@@ -55,7 +55,10 @@ if (flag("--dry")) {
   process.exit(0);
 }
 
-const browser = await chromium.launch({ headless: !flag("--headed") });
+// WebGL on the GPU (the landing's three.js relief): headless Chromium otherwise falls back to SwiftShader, which renders
+// the relief at ~25 fps while recording. On macOS, ANGLE's Metal backend keeps it at 60. DEMO_NO_GPU=1 turns it off.
+const gpu = process.platform === "darwin" && !process.env.DEMO_NO_GPU ? ["--enable-gpu", "--ignore-gpu-blocklist", "--use-angle=metal"] : [];
+const browser = await chromium.launch({ headless: !flag("--headed"), args: gpu });
 const results = [];
 for (const { b, mod, skip } of plan) {
   if (skip) {
