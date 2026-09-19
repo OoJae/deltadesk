@@ -7,6 +7,7 @@ const service = process.argv[2];
 const r = JSON.parse(readFileSync(0, "utf8"));
 const bp = (x) => `${x >= 0 ? "+" : ""}${Number(x).toFixed(1)} bp`;
 const usd = (x) => `${x < 0 ? "−" : "+"}$${Math.abs(Number(x)).toFixed(2)}`;
+const pct = (x) => (x == null ? "–" : `${(100 * x).toFixed(0)}%`);
 const out = [];
 
 if (r.error) {
@@ -17,7 +18,7 @@ if (r.error) {
   out.push(`Pool ${r.pool_mid.toFixed(4)} vs fair ${r.fair_value.toFixed(4)} (${bp(r.gap_bps)}), regime ${r.regime}.`);
   if (r.verdict !== "ALLOW" && r.next_regime_change) {
     const at = new Date(r.next_regime_change.at * 1000).toLocaleString("en-US", { timeZone: "America/New_York", weekday: "short", hour: "2-digit", minute: "2-digit" });
-    out.push(`Conditions change ${at} ET (${r.next_regime_change.regime}).`);
+    out.push(`Conditions change ${at} ET (${r.next_regime_change.reopen_window ? "reopen window starts" : r.next_regime_change.regime}).`);
   }
 } else if (service === "fair-value") {
   out.push(`${r.pool}: fair ${r.fair_value.toFixed(4)} (Hyperliquid ${r.hl_price} × ${r.basis_k.toFixed(5)}), pool ${r.pool_mid.toFixed(4)} (${bp(r.gap_bps)}).`);
@@ -30,13 +31,21 @@ if (r.error) {
   out.push(`${r.pool} worst hours for LPs: ${worst.join(", ")}.`);
   if (r.current_hour?.edge_1h != null) out.push(`This hour historically: edge ${r.current_hour.edge_1h.toFixed(2)} (fees ÷ value picked off).`);
 } else if (service === "tearsheet") {
-  const t = r.totals ?? r.total ?? {};
-  const k = t.per_1k_day ?? t;
-  out.push(`Net ${usd(k.net ?? t.net_usd ?? 0)}${t.per_1k_day ? " per $1k/day" : ""}.`);
-  out.push(`Fees ${usd(k.fees ?? t.fees_usd ?? 0)}, picked off ${usd(-(k.lvr ?? t.lvr_usd ?? 0))}, IL vs holding ${usd(k.il ?? t.il_usd ?? 0)}, gas ${usd(-(k.gas ?? t.gas_usd ?? 0))}.`);
-  if (t.residual_bps != null) out.push(`Reconciled to on-chain fees within ${Math.abs(t.residual_bps).toFixed(1)} bp.`);
+  const s = r.summary;
+  if (!s) {
+    out.push(`No LP positions found for ${r.owner} on ${r.chain ?? "robinhood"}.`);
+  } else {
+    const a = s.aerodrome;
+    out.push(`Result vs simply holding the tokens: ${usd(s.vs_hodl_usd)} (${usd(s.per_1k_per_day.vs_hodl)} per $1k per day), ${s.n_positions} position${s.n_positions === 1 ? "" : "s"}${s.n_open ? ` (${s.n_open} open)` : ""}.`);
+    out.push(`Fees ${usd(s.fees_usd)}${a ? `, AERO ${usd(a.aero_usd)}` : ""}, impermanent loss vs holding ${usd(s.il_usd)} (informed flow picked off ${usd(s.lvr_hl_1h_usd).slice(1)} within 1h), gas ${usd(-s.gas_usd)}. Net including stock price moves ${usd(s.net_usd)}.`);
+    const e = a ? a.edge_hl_1h_incl_aero : s.edge_hl_1h;
+    if (e != null) out.push(`LP edge ${e.toFixed(2)}${a ? " incl. AERO" : ""} (fees ÷ value picked off; above 1 = earned more than informed flow took).`);
+    if (a) out.push(`Staked ${pct(a.staked_share)} of the time: ${usd(a.fees_to_voters_usd).slice(1)} of fees went to veAERO voters${a.aero_forfeited > 0 ? `, ${a.aero_forfeited.toFixed(1)} AERO forfeited by withdrawing within 5 minutes of staking` : ""}.`);
+    if (s.residual?.reconciled_positions) out.push(`${s.residual.reconciled_positions} closed positions reconcile to on-chain collected fees within ${s.residual.max_abs_residual_bp.toFixed(4)} bp.`);
+  }
 } else if (service === "lp-league") {
-  (r.rows ?? []).slice(0, 5).forEach((row, i) => out.push(`${i + 1}. ${row.owner?.slice(0, 10)}…  ${usd(row.net_per_1k_day ?? 0)} per $1k/day, edge ${(row.edge ?? 0).toFixed(2)}`));
+  (r.rows ?? []).slice(0, 5).forEach((row) =>
+    out.push(`${row.rank}. ${String(row.manager).slice(0, 10)}…  ${usd(row.vs_hodl_per_1k_day)} per $1k·day vs holding, edge ${row.edge_hl != null ? row.edge_hl.toFixed(2) : "–"}, ${row.positions} positions (${row.pools})`));
 } else {
   out.push(`unknown service ${service}`);
   process.exitCode = 2;
