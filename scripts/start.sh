@@ -11,4 +11,4 @@ node recorder/tape.mjs >> /app/data/recorder.log 2>&1 &
   done
 ) &
 cd engine
-exec uv run --no-sync uvicorn api.app:app --host :: --port "${PORT:-8787}" --proxy-headers
+exec uv run --no-sync uvicorn api.app:app --host 0.0.0.0 --port "${PORT:-8787}" --proxy-headers
