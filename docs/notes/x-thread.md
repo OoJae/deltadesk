@@ -108,7 +108,7 @@ Honest notes:
 • A fair-value gap rule failed out of sample (−$128); only the reopen guard held.
 • A rerange costs ~$0.107 in gas, so a $50 lane mints once and holds that range.
 
-Demo: {{DEMO_VIDEO_URL}}
+Demo: https://youtu.be/pjpZgsKzxQY
 Code: https://github.com/OoJae/deltadesk
 Built for Runtime Agent Week
 ```

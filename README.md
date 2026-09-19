@@ -34,7 +34,7 @@ question for AMMs taking over equities market making. DeltaDesk measures the ans
 | The agent's on-chain decision | A delegated `signal()` `LaneAction` for the weekend gate: [`0xddbc1b92…7375`](https://robinhoodchain.blockscout.com/tx/0xddbc1b92b20332ddee6e2ec587e27246021c42b2b51444e848fab7e0d4fe7375) (weekend: market closed) and [`0xbe80e98b…3223`](https://robinhoodchain.blockscout.com/tx/0xbe80e98beb80f8f87275b01568fd451fe4ceea35881fe74c106e2826ed083223) (fair value restored), each with a `reasonHash` whose preimage is recorded |
 | Dynamic policy denial of a staged malicious transfer request (the call a prompt injection would try), sent straight to the delegated signer | Dynamic's policy API refuses Robinhood Chain (`Unsupported chainIds for EVM: 4663`), so on 4663 the lane contract and the agent's ABI are the fence. On Base, an environment rule (allowlist = the lane address) made Dynamic's co-signer refuse the delegated Operator's staged USDC transfer (the session was dropped after 61.6 s, nothing signed), while the same key signed an allowed destination in 2.3 s: [docs/m2-desk.md §3](docs/m2-desk.md) |
 | Start a desk / desk agent | https://web-production-10951.up.railway.app/desk · https://desk-agent-production-71b1.up.railway.app/health |
-| Demo video | {{DEMO_VIDEO_URL}} |
+| Demo video | https://youtu.be/pjpZgsKzxQY |
 
 Every on-chain value from today is recorded, with its explorer link, in [`docs/m2-desk.md`](docs/m2-desk.md).
 

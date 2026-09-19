@@ -19,7 +19,7 @@ Fill every `{{…}}` placeholder before pasting. [`docs/m2-desk.md`](m2-desk.md)
 | **Project link** | URL | `https://web-production-10951.up.railway.app` |
 | **Demo plans** | choice | **Recorded demo only (online submission)** |
 | **Repository link** | URL | https://github.com/OoJae/deltadesk (it must be public; the Uniswap track requires it) |
-| **Demo video link** | URL | {{DEMO_VIDEO_URL}} (required for a recorded submission) |
+| **Demo video link** | URL | https://youtu.be/pjpZgsKzxQY (required for a recorded submission) |
 | **Project post on X (Twitter)** | a status URL | {{X_POST_URL}}, the first post of [notes/x-thread.md](notes/x-thread.md). A profile link is rejected. |
 | **Pitch deck link** | URL | optional; leave blank, or {{DECK_URL}} |
 | **Prize entries** | multi-select | ☑ **Dynamic** ☑ **Uniswap**. Bankr is added automatically. Leave Definitive Flash, Grok Bot and Blackbird unchecked. |
