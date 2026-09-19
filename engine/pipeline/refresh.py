@@ -39,6 +39,8 @@ STEPS = [
     # Transfer-topic scan on Base is slow, and owners come from the mint tx (base_aero_lp_txs) plus gauge events.
     ("hyper_sync_heavy", ["indexer.hs_backfill", "base_aero_nvda", "base_aero_gauge", "base_aero_usdc", "base_aero_lp_txs",
                           "base_aero_swap_txs", "swap_txs"], 1800),
+    ("aero_study", ["aero.study"], 3600),          # Base: NVDAc/USDC pool study, emissions, voter fee split
+    ("aero_positions", ["aero.positions"], 3600),  # Base: staked / unstaked tearsheets
     ("flow", ["flow.xray"], 3600),
     ("backtest", ["backtest.gap_exclusion"], 6 * 3600),
 ]

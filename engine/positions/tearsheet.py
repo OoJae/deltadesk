@@ -111,6 +111,7 @@ def tearsheet(owner: str, data: tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame] 
     tot = {c: float(sel[c].fill_null(0.0).sum()) for c in ("deposits_usd", "withdrawals_usd", "end_value_usd", "fee_usd", "fee_usd_v1h",
                                                          "fee_usd_hlv1h", "picked_1h", "picked_hl_1h", "picked_5m", "il_usd", "price_pnl_usd",
                                                          "gas_usd", "net_usd", "vs_hodl_usd", "vol_usd")}
+    aero = "aero_usd" in sel.columns  # Aerodrome (Base): fee_usd = fees the LP kept; AERO emissions are extra income
     # Only fully collected closed positions can be reconciled (NPM.burn requires tokensOwed == 0; or collected after close).
     rec = sel.filter(pl.col("residual_usd").is_not_null() & pl.col("closed") & (pl.col("nft_burned").fill_null(False) | pl.col("collected_after_close").fill_null(False)))
     per_k = 1000.0 / notional if notional > 0 else float("nan")
@@ -174,6 +175,24 @@ def tearsheet(owner: str, data: tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame] 
                       "weekend_share": r["weekend_share"], "in_range_share": r["in_range_share"], "range_width": width_class(r["width_ticks"]),
                       "nft_burned": r["nft_burned"], "nft_transfers": r["n_transfers"]},
         })
+    if aero:
+        ns = sel["notional_seconds"].fill_null(0.0)
+        a_usd = float(sel["aero_usd"].fill_null(0.0).sum())
+        summary["aerodrome"] = {
+            "aero_earned": float(sel["aero_earned"].fill_null(0.0).sum()), "aero_forfeited": float(sel["aero_forfeited"].fill_null(0.0).sum()),
+            "aero_usd": a_usd, "fees_gross_usd": float(sel["fee_usd_gross"].fill_null(0.0).sum()),
+            "fees_to_voters_usd": float(sel["fees_to_voters_usd"].fill_null(0.0).sum()),
+            "staked_share": _ratio(float((ns * sel["staked_share"].fill_null(0.0)).sum()), float(ns.sum())),
+            "early_withdrawals": int(sel["n_early_withdrawals"].fill_null(0).sum()),
+            "edge_hl_1h_incl_aero": _ratio(tot["fee_usd_hlv1h"] + a_usd, tot["picked_hl_1h"]),
+        }
+        summary["per_1k"]["aero"] = a_usd * per_k
+        summary["per_1k_per_day"]["aero"] = a_usd * per_day
+        by_id = {r["pos_id"]: r for r in sel.select("pos_id", "aero_earned", "aero_usd", "aero_forfeited", "staked_share", "fees_to_voters_usd").iter_rows(named=True)}
+        for row in rows:
+            x = by_id[row["pos_id"]]
+            row.update({"aero_earned": x["aero_earned"], "aero_usd": x["aero_usd"], "aero_forfeited": x["aero_forfeited"],
+                        "staked_share": x["staked_share"], "fees_to_voters_usd": x["fees_to_voters_usd"]})
     out.update({"summary": summary, "by_regime": regimes, "by_pool": by_pool, "positions": rows})
     return _deep_clean(out)
 

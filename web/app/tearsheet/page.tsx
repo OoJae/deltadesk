@@ -11,28 +11,39 @@ type Summary = {
   gas_usd: number; net_usd: number; vs_hodl_usd: number;
   residual: { reconciled_positions: number; residual_usd: Num; max_abs_residual_bp: Num };
   per_1k: Record<string, number>;
+  aerodrome?: { aero_earned: number; aero_forfeited: number; aero_usd: number; fees_gross_usd: number; fees_to_voters_usd: number;
+                staked_share: Num; early_withdrawals: number; edge_hl_1h_incl_aero: Num };
   flags: { jit_positions: number; weekend_share: Num; in_range_share: Num; median_width_ticks: number; rebalances_per_day: number };
 };
 type Tearsheet = {
-  owner: string; role: string; match: { as_owner: number; as_operator: number }; summary: Summary | null;
+  owner: string; role: string; chain?: string; match: { as_owner: number; as_operator: number }; summary: Summary | null;
   by_regime: { regime: string; fees_usd: number; lvr_hl_1h_usd?: number; picked_hl_1h?: number; edge_hl_1h?: Num }[];
   positions: Record<string, unknown>[];
 };
 
 const signed = (x: number) => `${x < 0 ? "−" : "+"}${usd(Math.abs(x), 2).replace("−", "")}`;
 
-export default async function TearsheetPage({ searchParams }: { searchParams: Promise<{ wallet?: string; as?: string }> }) {
+const CHAINS = [
+  { id: "robinhood", label: "Robinhood Chain", pools: "NVDA, SPY, TSLA or QQQ/SPY pools" },
+  { id: "base", label: "Base · Aerodrome", pools: "the Aerodrome NVDAc/USDC pool" },
+] as const;
+
+export default async function TearsheetPage({ searchParams }: { searchParams: Promise<{ wallet?: string; as?: string; chain?: string }> }) {
   const sp = await searchParams;
   const wallet = (sp.wallet ?? "").trim().toLowerCase();
   const role = ["owner", "operator"].includes(sp.as ?? "") ? sp.as! : "auto";
+  const chain = CHAINS.find((c) => c.id === sp.chain) ?? CHAINS[0];
   const valid = /^0x[0-9a-f]{40}$/.test(wallet);
-  const res = valid ? await api<Tearsheet>(`/tearsheet/robinhood/${wallet}?role=${role}`, { premium: true }) : null;
+  const res = valid ? await api<Tearsheet>(`/tearsheet/${chain.id}/${wallet}?role=${role}`, { premium: true }) : null;
   const t = res?.ok ? res.data : null;
   const s = t?.summary ?? null;
+  const ae = s?.aerodrome;
+  const href = (c: string) => `/tearsheet?chain=${c}${wallet ? `&wallet=${wallet}` : ""}${role !== "auto" ? `&as=${role}` : ""}`;
 
   const lines = s
     ? [
-        { k: "Fees earned", v: s.fees_usd, p: s.per_1k.fees, strong: false },
+        { k: ae ? "Fees earned (kept by you)" : "Fees earned", v: s.fees_usd, p: s.per_1k.fees, strong: false },
+        ...(ae ? [{ k: "AERO emissions received", v: ae.aero_usd, p: s.per_1k.aero ?? 0, strong: false }] : []),
         { k: "Picked off by informed flow (vs Hyperliquid, 1h)", v: -s.lvr_hl_1h_usd, p: -s.per_1k.lvr_hl_1h, strong: false },
         { k: "Impermanent loss vs holding (includes the above)", v: s.il_usd, p: s.per_1k.il, strong: false },
         { k: "Gas", v: -s.gas_usd, p: -s.per_1k.gas, strong: false },
@@ -47,16 +58,23 @@ export default async function TearsheetPage({ searchParams }: { searchParams: Pr
       <header className="space-y-2">
         <p className="text-xs font-medium uppercase tracking-wider text-muted">LP tearsheet</p>
         <h1 className="text-3xl font-semibold">What did your liquidity actually earn?</h1>
-        <p className="max-w-2xl text-sm text-ink-2">Fees, value picked off by informed flow, impermanent loss vs holding, price P&amp;L and gas for Robinhood Chain stock pools, reconciled against the fees actually collected on-chain.</p>
+        <p className="max-w-2xl text-sm text-ink-2">Fees, AERO emissions, value picked off by informed flow, impermanent loss vs holding, price P&amp;L and gas for tokenized-stock LPs on Robinhood Chain (Uniswap) and Base (Aerodrome), reconciled against what was actually collected on-chain.</p>
       </header>
+      <nav className="flex gap-2 text-sm" aria-label="Chain">
+        {CHAINS.map((c) => (
+          <a key={c.id} href={href(c.id)} aria-current={c.id === chain.id ? "page" : undefined}
+             className={`rounded-lg px-3 py-1.5 ${c.id === chain.id ? "bg-[var(--accent)] text-white" : "bg-surface-2 text-ink-2 hover:text-ink"}`}>{c.label}</a>
+        ))}
+      </nav>
       <form className="card flex gap-2 p-3" action="/tearsheet">
-        <input name="wallet" defaultValue={wallet} placeholder="0x… LP wallet on Robinhood Chain" className="w-full rounded-lg bg-surface-2 px-3 py-2 font-mono text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]" />
+        <input name="wallet" defaultValue={wallet} placeholder={`0x… LP wallet on ${chain.label}`} className="w-full rounded-lg bg-surface-2 px-3 py-2 font-mono text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]" />
+        <input type="hidden" name="chain" value={chain.id} />
         {role !== "auto" && <input type="hidden" name="as" value={role} />}
         <button className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white">Analyze</button>
       </form>
       {wallet && !valid && <p className="text-sm text-ink-2">That isn&apos;t a 0x wallet address.</p>}
       {res && !res.ok && <p className="text-sm text-ink-2">{res.status === 503 ? "Tearsheets are still being computed. Try again shortly." : `Couldn't load: ${res.error}`}</p>}
-      {t && !s && <p className="text-sm text-ink-2">No LP positions found for this wallet in NVDA, SPY, TSLA or QQQ/SPY pools.</p>}
+      {t && !s && <p className="text-sm text-ink-2">No LP positions found for this wallet in {chain.pools}.</p>}
 
       {t && s && (
         <>
@@ -68,7 +86,7 @@ export default async function TearsheetPage({ searchParams }: { searchParams: Pr
                 <div className="mt-1 text-sm text-ink-2">vs simply holding the same tokens</div>
               </div>
               <dl className="grid grid-cols-2 gap-3 text-xs">
-                <div><dt className="text-muted">LP edge vs HL</dt><dd className="text-lg font-semibold">{ratio(s.edge_hl_1h)}</dd></div>
+                <div><dt className="text-muted">{ae ? "Edge incl. AERO" : "LP edge vs HL"}</dt><dd className="text-lg font-semibold">{ratio(ae ? ae.edge_hl_1h_incl_aero : s.edge_hl_1h)}</dd></div>
                 <div><dt className="text-muted">Positions</dt><dd className="text-lg font-semibold">{s.n_positions}{s.n_open ? ` (${s.n_open} open)` : ""}</dd></div>
                 <div><dt className="text-muted">Avg notional</dt><dd className="text-lg font-semibold">{usd(s.avg_notional_usd, 0)}</dd></div>
                 <div><dt className="text-muted">Median range</dt><dd className="text-lg font-semibold">{(s.flags.median_width_ticks / 100).toFixed(1)}%</dd></div>
@@ -88,6 +106,13 @@ export default async function TearsheetPage({ searchParams }: { searchParams: Pr
                 ))}
               </tbody>
             </table>
+            {ae && (
+              <p className="text-xs text-ink-2 md:col-span-2">
+                Staked in the Aerodrome gauge {ae.staked_share != null ? `${(ae.staked_share * 100).toFixed(0)}%` : "–"} of the time. Staked liquidity earns AERO
+                instead of fees: {usd(ae.fees_to_voters_usd)} of this wallet&apos;s {usd(ae.fees_gross_usd)} fee share went to veAERO voters.
+                {ae.aero_forfeited > 0 && <> Withdrawing within 5 minutes of staking forfeits the reward: {ae.aero_forfeited.toFixed(1)} AERO forfeited over {ae.early_withdrawals} early withdrawals.</>}
+              </p>
+            )}
           </section>
 
           <section className="grid gap-4 md:grid-cols-2">

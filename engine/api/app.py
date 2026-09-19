@@ -214,11 +214,11 @@ def study():
 
 
 STUDY_SCOPES = {"m0": STUDY / "m0", "hl_ref": STUDY / "m1" / "hl_ref", "flow": STUDY / "m1" / "flow",
-                "positions": STUDY / "m1" / "positions", "backtest": STUDY / "m1" / "backtest"}
+                "positions": STUDY / "m1" / "positions", "backtest": STUDY / "m1" / "backtest", "aero": STUDY / "m1" / "aero"}
 # Row-level tables (per swap, per wallet, per position) are too large for JSON or are the premium tearsheet product;
 # the public surface is aggregates only. The row cap also catches any future row-level table not listed here.
 NOT_PUBLIC = {"swaps", "hl_markouts", "positions", "segments", "attribution", "owners",
-              "swap_flow", "takers", "taker_pools", "liquidity_windows"}
+              "swap_flow", "takers", "taker_pools", "liquidity_windows", "aero_by_user"}
 MAX_PUBLIC_ROWS = 10_000
 
 
@@ -253,6 +253,15 @@ def study_table(scope: str, name: str, pool: str | None = None):
     return {"scope": scope, "name": name, "rows": rows(df)}
 
 
+@app.get("/study/aero")
+def study_aero():
+    """Aerodrome NVDAc/USDC (Base) pool summary: gross fees, the voters' share, emissions, value picked off, LP edge."""
+    f = STUDY / "m1" / "aero" / "pool_summary.json"
+    if not f.exists():
+        raise HTTPException(503, "Aerodrome study not built yet")
+    return {**json.loads(f.read_text()), "disclaimer": DISCLAIMER}
+
+
 @app.get("/study/tables")
 def study_tables():
     out = {}
@@ -262,17 +271,22 @@ def study_tables():
     return out
 
 
+# chain → (canonical name, positions folder): Robinhood Chain Uniswap v3/v4 pools; Base Aerodrome NVDAc/USDC (staked + unstaked)
+TEARSHEET_CHAINS = {"robinhood": ("robinhood", STUDY / "m1" / "positions"), "4663": ("robinhood", STUDY / "m1" / "positions"),
+                    "base": ("base", STUDY / "m1" / "aero"), "8453": ("base", STUDY / "m1" / "aero")}
+
+
 @app.get("/tearsheet/{chain}/{wallet}", dependencies=[Depends(premium)])
 def tearsheet(chain: str, wallet: str, role: str = "auto"):
-    if chain not in ("robinhood", "4663"):
-        raise HTTPException(501, "only Robinhood Chain (4663) for now; Base/Aerodrome coming in M1.3")
-    try:
-        from positions.tearsheet import tearsheet as build  # built by the positions module
-    except ImportError as e:
-        raise HTTPException(503, "positions module not built yet") from e
+    if chain not in TEARSHEET_CHAINS:
+        raise HTTPException(404, "chain must be robinhood (4663) or base (8453)")
     if role not in ("auto", "owner", "operator"):
         raise HTTPException(400, "role must be auto, owner or operator")
-    return {**build(wallet.lower(), role=role), "disclaimer": DISCLAIMER}
+    name, root = TEARSHEET_CHAINS[chain]
+    if not (root / "positions.parquet").exists():
+        raise HTTPException(503, f"{name} tearsheets not built yet")
+    from positions.tearsheet import load, tearsheet as build
+    return {**build(wallet.lower(), data=load(root), role=role), "chain": name, "disclaimer": DISCLAIMER}
 
 
 @app.get("/lp-league", dependencies=[Depends(premium)])
