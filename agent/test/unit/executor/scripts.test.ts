@@ -91,6 +91,35 @@ describe("scripts/signer-check", () => {
     expect(chain.sent).toHaveLength(0);
   });
 
+  it("can sign the denial probe for another chain (Dynamic policies do not support 4663)", async () => {
+    const seen: number[] = [];
+    const inner = localSigner();
+    const policy: TxSigner = {
+      ...inner,
+      signTransaction: async (tx) => {
+        seen.push(tx.chainId);
+        if (tx.chainId === 8453)
+          throw Object.assign(new Error("Transaction denied by policy"), { status: 403 });
+        return inner.signTransaction(tx);
+      },
+    };
+    const chain = laneChain();
+    const usdcBase = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913" as const;
+    const r = await runSignerCheck({
+      ...checkDeps(chain, policy),
+      denialChainId: 8453,
+      denialToken: usdcBase,
+    });
+    expect(seen).toEqual([4663, 8453]);
+    expect(r.denial).toMatchObject({
+      chainId: 8453,
+      token: usdcBase,
+      outcome: "denied",
+      code: "SIGNER_DENIED",
+    });
+    expect(chain.sent).toHaveLength(0);
+  });
+
   it("refuses the wrong chain, and a signer that is not the operator", async () => {
     const wrong = laneChain();
     wrong.chainIdValue = 1;

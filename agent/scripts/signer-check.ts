@@ -1,4 +1,4 @@
-// `pnpm signer-check [--lane 0x…]`: prove the operator signer works and that the Dynamic policy
+// `pnpm signer-check [--lane 0x…] [--denial-chain <id> --denial-token 0x…]`: prove the operator signer works and that the Dynamic policy
 // bites, WITHOUT sending anything. This script has no broadcaster: nothing it signs can leave it.
 //
 //   1. the RPC is the configured chain; the signer is the lane's operator and never its owner.
@@ -38,6 +38,12 @@ export interface SignerCheckDeps {
   nowMs: number;
   /** The token for the denial probe (USDG on 4663). */
   denialToken?: Address;
+  /**
+   * Chain id the denial probe is signed for (default: the lane's chain). Dynamic's policy engine
+   * does not support Robinhood Chain (its policy API answers "Unsupported chainIds for EVM: 4663"),
+   * so the probe can target a chain it does support (e.g. Base 8453) with the SAME delegated key.
+   */
+  denialChainId?: number;
 }
 
 export interface SignerCheckReport {
@@ -55,6 +61,7 @@ export interface SignerCheckReport {
   };
   denial: {
     token: Address;
+    chainId: number;
     outcome: "denied" | "signed" | "error";
     code: string | null;
     message: string;
@@ -107,8 +114,10 @@ export async function runSignerCheck(d: SignerCheckDeps): Promise<SignerCheckRep
 
   // 3. The policy probe: an operator USDG.transfer that the Dynamic policy must refuse to sign.
   const token = (d.denialToken ?? ADDRESSES_4663.USDG).toLowerCase() as Address;
+  const probeChainId = d.denialChainId ?? laneTx.chainId;
   const probe: UnsignedTx = {
     ...laneTx,
+    chainId: probeChainId,
     to: token,
     data: encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [id.owner, 1n] }),
     gas: 100_000n,
@@ -118,16 +127,17 @@ export async function runSignerCheck(d: SignerCheckDeps): Promise<SignerCheckRep
     await signWithTimeout(d.signer, probe, d.signTimeoutMs);
     denial = {
       token,
+      chainId: probeChainId,
       outcome: "signed",
       code: null,
-      message: "the signer SIGNED an operator USDG.transfer: policy not enforced",
+      message: `the signer SIGNED an operator token transfer on chain ${probeChainId}: policy not enforced`,
     };
   } catch (err) {
     const e = classifySignerError(err);
     denial =
       e.code === "SIGNER_DENIED"
-        ? { token, outcome: "denied", code: e.code, message: e.message }
-        : { token, outcome: "error", code: e.code, message: e.message };
+        ? { token, chainId: probeChainId, outcome: "denied", code: e.code, message: e.message }
+        : { token, chainId: probeChainId, outcome: "error", code: e.code, message: e.message };
   }
   return {
     lane: d.lane,
@@ -148,6 +158,10 @@ export async function runSignerCheck(d: SignerCheckDeps): Promise<SignerCheckRep
 
 async function main(argv: string[]): Promise<number> {
   const cfg = await getConfig();
+  const flag = (name: string): string | undefined => {
+    const j = argv.indexOf(name);
+    return j >= 0 ? argv[j + 1] : undefined;
+  };
   const i = argv.indexOf("--lane");
   const lane = ((i >= 0 ? argv[i + 1] : undefined) ?? cfg.lanes.A)?.toLowerCase() as
     | Address
@@ -172,6 +186,12 @@ async function main(argv: string[]): Promise<number> {
       feeCapWei: cfg.limits.maxFeePerGasWei,
       signTimeoutMs: cfg.timing.signTimeoutMs,
       nowMs: Date.now(),
+      ...(flag("--denial-chain") === undefined
+        ? {}
+        : { denialChainId: Number(flag("--denial-chain")) }),
+      ...(flag("--denial-token") === undefined
+        ? {}
+        : { denialToken: (flag("--denial-token") as string).toLowerCase() as Address }),
     });
     const dir = join("data", "signer-check");
     mkdirSync(dir, { recursive: true });
