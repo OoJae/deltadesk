@@ -1,6 +1,6 @@
 # The Truth Study (M1): can LPs beat informed flow on tokenized stocks?
 
-*Robinhood Chain (4663), Uniswap v3 NVDA/USDG and v4 SPY/USDG, TSLA/USDG, QQQ/SPY. Every swap from each pool's launch to 2026‑09‑18 (3.34M swaps, $1.07B volume). Fair value comes from Hyperliquid trade.xyz 24/7 prices, scaled by a basis calibrated on each prior regular session. Four modules, each adversarially reviewed; 121 tests.*
+*Robinhood Chain (4663), Uniswap v3 NVDA/USDG and v4 SPY/USDG, TSLA/USDG, QQQ/SPY. Every swap from each pool's launch to 2026‑09‑18 (3.34M swaps, $1.07B volume). Fair value comes from Hyperliquid trade.xyz 24/7 prices, scaled by a basis calibrated on each prior regular session. Four modules, each adversarially reviewed; 122 tests.*
 
 ## The answer in five lines
 
