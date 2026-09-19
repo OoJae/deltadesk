@@ -54,3 +54,23 @@ def test_mid_from_sqrt_orientation():
     raw = 760 * 1e6 / 1e18
     sqrtp = int((raw ** 0.5) * 2**96)
     assert abs(live.mid_from_sqrt(spy, sqrtp) - 760) < 1e-6
+
+
+def test_public_study_tables_are_aggregates_only(tmp_path, monkeypatch):
+    """Row-level tables (per swap / wallet / position) never leak through /study/table, by name or by size."""
+    import polars as pl
+    from fastapi.testclient import TestClient
+
+    from api import app as appmod
+
+    scope = tmp_path / "flow"
+    scope.mkdir()
+    pl.DataFrame({"label": ["hl_arb", "retail"], "fee_usd": [1.0, 2.0]}).write_parquet(scope / "by_label.parquet")
+    pl.DataFrame({"taker": ["0xa"], "fee_usd": [1.0]}).write_parquet(scope / "takers.parquet")                  # listed
+    pl.DataFrame({"x": range(appmod.MAX_PUBLIC_ROWS + 1)}).write_parquet(scope / "new_rowlevel.parquet")     # too big
+    monkeypatch.setitem(appmod.STUDY_SCOPES, "flow", scope)
+    c = TestClient(appmod.app)
+    assert c.get("/study/table/flow/by_label").status_code == 200
+    assert c.get("/study/table/flow/takers").status_code == 404
+    assert c.get("/study/table/flow/new_rowlevel").status_code == 404
+    assert c.get("/study/tables").json()["flow"] == ["by_label"]

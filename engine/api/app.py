@@ -22,6 +22,7 @@ import os
 import time
 from datetime import datetime
 from functools import lru_cache
+from pathlib import Path
 
 import polars as pl
 from fastapi import Depends, FastAPI, Header, HTTPException
@@ -214,7 +215,20 @@ def study():
 
 STUDY_SCOPES = {"m0": STUDY / "m0", "hl_ref": STUDY / "m1" / "hl_ref", "flow": STUDY / "m1" / "flow",
                 "positions": STUDY / "m1" / "positions", "backtest": STUDY / "m1" / "backtest"}
-NOT_PUBLIC = {"swaps", "hl_markouts", "segments", "attribution"}  # row-level tables: too large / served via premium routes
+# Row-level tables (per swap, per wallet, per position) are too large for JSON or are the premium tearsheet product;
+# the public surface is aggregates only. The row cap also catches any future row-level table not listed here.
+NOT_PUBLIC = {"swaps", "hl_markouts", "positions", "segments", "attribution", "owners",
+              "swap_flow", "takers", "taker_pools", "liquidity_windows"}
+MAX_PUBLIC_ROWS = 10_000
+
+
+@lru_cache(maxsize=256)
+def _row_count(path: str, mtime: float) -> int:
+    return pl.scan_parquet(path).select(pl.len()).collect().item()  # parquet metadata only
+
+
+def is_public(f: Path) -> bool:
+    return f.stem not in NOT_PUBLIC and _row_count(str(f), f.stat().st_mtime) <= MAX_PUBLIC_ROWS
 
 
 @lru_cache(maxsize=64)
@@ -231,6 +245,8 @@ def study_table(scope: str, name: str, pool: str | None = None):
     f = base / f"{name}.parquet"
     if not f.exists():
         raise HTTPException(503, f"{scope}/{name} not built yet")
+    if not is_public(f):
+        raise HTTPException(404, "unknown table")
     df = _scope_table(str(f), f.stat().st_mtime)
     if pool and "pool" in df.columns:
         df = df.filter(pl.col("pool") == _pool(pool).key)
@@ -242,7 +258,7 @@ def study_tables():
     out = {}
     for scope, base in STUDY_SCOPES.items():
         if base.exists():
-            out[scope] = sorted(f.stem for f in base.glob("*.parquet") if f.stem not in NOT_PUBLIC)
+            out[scope] = sorted(f.stem for f in base.glob("*.parquet") if is_public(f))
     return out
 
 
