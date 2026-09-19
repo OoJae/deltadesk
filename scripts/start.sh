@@ -2,6 +2,7 @@
 # DeltaDesk server entrypoint (Railway): tape recorder + refresh loop + API, sharing /app/data (a mounted volume).
 set -e
 mkdir -p /app/data
+rm -f /app/data/pipeline.lock  # a fresh container has no running refresh
 node recorder/tape.mjs >> /app/data/recorder.log 2>&1 &
 (
   cd engine

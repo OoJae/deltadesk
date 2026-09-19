@@ -27,15 +27,18 @@ STATE = DATA / "pipeline_state.json"
 LOCK = DATA / "pipeline.lock"
 
 STEPS = [
-    # (name, module, min interval seconds)
-    ("hyper_sync", "indexer.hs_backfill", 0),
-    ("hl_candles", "indexer.hl_candles", 3600),
-    ("study_m0", "markout.study", 0),
-    ("hl_ref", "markout.hl_ref", 0),
-    ("positions", "positions.attribute", 3600),
-    ("league", "league.build", 3600),
-    ("flow", "flow.xray", 3600),
-    ("backtest", "backtest.gap_exclusion", 6 * 3600),
+    # (name, [module, *args], min interval seconds). Core sources first so the study, tearsheets and League exist
+    # within ~15 min of a fresh deploy; the heavy sources (swap senders, Base) follow and feed the Flow X-ray.
+    ("hyper_sync", ["indexer.hs_backfill", "v3_nvda_usdg", "v4_pools", "chainlink", "lp_txs", "npm_transfers", "posm_transfers"], 0),
+    ("hl_candles", ["indexer.hl_candles"], 3600),
+    ("study_m0", ["markout.study"], 0),
+    ("hl_ref", ["markout.hl_ref"], 0),
+    ("positions", ["positions.attribute"], 3600),
+    ("league", ["league.build"], 3600),
+    ("hyper_sync_heavy", ["indexer.hs_backfill", "swap_txs", "base_aero_nvda", "base_aero_gauge", "base_npm_transfers",
+                          "base_aero_usdc", "base_aero_lp_txs", "base_aero_swap_txs"], 1800),
+    ("flow", ["flow.xray"], 3600),
+    ("backtest", ["backtest.gap_exclusion"], 6 * 3600),
 ]
 
 
@@ -55,14 +58,15 @@ def main():
     LOCK.write_text(str(os.getpid()))
     state = json.loads(STATE.read_text()) if STATE.exists() else {}
     try:
-        for name, module, every in STEPS:
+        for name, cmd, every in STEPS:
+            module = cmd[0]
             last = state.get(name, {}).get("ok_at", 0)
             if not installed(module):
                 continue
             if not full and time.time() - last < every:
                 continue
             t0 = time.time()
-            r = subprocess.run([sys.executable, "-m", module], cwd=ENGINE, capture_output=True, text=True, timeout=3 * 3600)
+            r = subprocess.run([sys.executable, "-m", *cmd], cwd=ENGINE, capture_output=True, text=True, timeout=4 * 3600)
             ok = r.returncode == 0
             state[name] = {"ok_at": time.time() if ok else last, "ran_at": time.time(), "ok": ok, "secs": round(time.time() - t0, 1),
                            "tail": (r.stdout + r.stderr)[-1500:]}
