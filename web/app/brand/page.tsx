@@ -531,7 +531,7 @@ export default function BrandPage() {
               <ul className="ledger-ruled">
                 {g.files.map((f) => (
                   <li key={f.href}>
-                    <a href={f.href} download={f.href.startsWith("/brand/") ? "" : undefined} className="group flex items-baseline justify-between gap-4 px-5 py-3.5 transition-colors hover:bg-vault-2 md:px-6">
+                    <a href={f.href} download={f.href.startsWith("/brand/") ? "" : undefined} className="group flex items-baseline justify-between gap-4 px-5 py-3.5 hover:bg-vault-2 md:px-6">
                       <span className="min-w-0">
                         <span className="block truncate font-mono text-[0.85rem] text-paper group-hover:underline group-hover:decoration-rule-strong group-hover:underline-offset-4">
                           {f.name}

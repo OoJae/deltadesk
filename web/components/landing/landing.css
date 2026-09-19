@@ -1,0 +1,383 @@
+/* ==============================================================================================================
+   Landing (/) only: the Engraved Book (sticky relief stage + five acts) and the hero's line reveal.
+   Tokens come from app/globals.css. Transform/opacity animation only. Reduced motion: no stage, stacked acts.
+   ============================================================================================================== */
+
+/* ---- Hero ---------------------------------------------------------------------------------------------------- */
+.dd-hero-line {
+  display: block;
+  overflow: hidden;
+  padding-bottom: 0.1em;
+  margin-bottom: -0.1em;
+}
+.dd-hero-line > span {
+  display: block;
+  animation: dd-hero-rise var(--dur-page) var(--ease-out) both;
+  animation-delay: calc(0.08s + var(--i, 0) * var(--stagger));
+}
+@keyframes dd-hero-rise {
+  from {
+    transform: translateY(104%);
+  }
+}
+.dd-hero-fade {
+  animation: dd-hero-fade var(--dur-page) var(--ease-out) both;
+  animation-delay: calc(0.35s + var(--i, 0) * var(--stagger));
+}
+@keyframes dd-hero-fade {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+.dd-cue-line {
+  display: block;
+  width: 1px;
+  height: 44px;
+  background: var(--rule-strong);
+  overflow: hidden;
+  position: relative;
+}
+.dd-cue-line::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--paper);
+  transform-origin: top;
+  animation: dd-cue 2.4s var(--ease-inout) infinite;
+}
+@keyframes dd-cue {
+  0% {
+    transform: scaleY(0);
+    opacity: 1;
+  }
+  55% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scaleY(1);
+    opacity: 0;
+  }
+}
+
+/* ---- The book: a sticky stage behind the hero and the acts ------------------------------------------------------ */
+.book {
+  position: relative;
+  isolation: isolate;
+  /* The hero headline's size (the text-hero clamp, capped by height so the hero fits one screen). */
+  --hero-fs: clamp(3rem, min(8.5vw, 11.4svh), 9.5rem);
+  /* The hero frame's guilloché band. */
+  --hero-frame: 10px;
+}
+@media (min-width: 768px) {
+  .book {
+    --hero-frame: 14px;
+  }
+}
+/* The track spans the whole book; the stage sticks inside it, so it leaves exactly when the book ends. */
+.book-track {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+.book-stage {
+  position: sticky;
+  top: 4rem;
+  height: calc(100svh - 4rem);
+  overflow: hidden;
+}
+.book-poster {
+  position: absolute;
+  /* Starts past the headline's measure (page gutter + copy indent + its widest line, ~6.6em, + air), so no engraved
+     line runs under the type; the WebGL hero fits itself the same way (ReliefCanvas fitHero). */
+  left: calc(max(0px, (100vw - 90rem) / 2) + 5.5rem + 6.6 * var(--hero-fs));
+  right: calc(1rem + var(--hero-frame) + 0.75rem); /* inside the frame's right rail */
+  top: 50%;
+  transform: translateY(-46%);
+  opacity: 0.9;
+  transition: opacity var(--dur-reveal) var(--ease-out);
+}
+.book-poster svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.relief-canvas {
+  opacity: 0;
+  transition: opacity var(--dur-page) var(--ease-out);
+}
+.relief-canvas[data-ready="true"] {
+  opacity: 1;
+}
+.book-stage:has(.relief-canvas[data-ready="true"]) .book-poster {
+  opacity: 0;
+}
+.book-content {
+  position: relative;
+  z-index: 1;
+}
+
+/* Acts: each act is a tall scroll span; its certificate panel holds while the relief plays that act's hours. */
+.book-act {
+  position: relative;
+  min-height: 170svh;
+  padding-bottom: 32svh;
+  display: flex;
+  flex-direction: column;
+}
+.book-panel {
+  position: sticky;
+  top: calc(4rem + 14svh);
+  pointer-events: auto;
+}
+@media (max-width: 767px) {
+  .book-poster {
+    left: -25vw;
+    right: -25vw;
+    top: auto;
+    bottom: 0;
+    transform: none;
+    opacity: 0.5;
+    /* Under the copy the engraving fades out, so its lines never cross the lede. */
+    mask-image: linear-gradient(to bottom, transparent 0 34%, #000 62%);
+  }
+  .book-act {
+    min-height: 190svh;
+    padding-bottom: 0;
+    justify-content: flex-end;
+  }
+  .book-panel {
+    top: auto;
+    bottom: 12px;
+  }
+}
+
+/* ---- Instrument readout, blade tags and the weekend timeline -------------------------------------------------------- */
+.relief-hud {
+  opacity: 0;
+  transition: opacity var(--dur-reveal) var(--ease-out);
+}
+.relief-hud[data-ready="true"]:not([data-phase="-1"]) {
+  opacity: 1;
+}
+.relief-readout {
+  position: absolute;
+  top: 1.25rem;
+  right: 2rem;
+  width: 15rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem 1.25rem;
+  padding: 0.9rem 1rem 1rem;
+  border: 1px solid var(--rule);
+  background: var(--vault);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+.relief-readout > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.relief-readout dt {
+  color: var(--paper-mute);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.64rem;
+}
+.relief-readout dd {
+  color: var(--paper);
+  font-size: 0.8rem;
+}
+.relief-readout dd[data-on="0"] {
+  color: var(--serial);
+}
+.relief-readout-head {
+  grid-column: 1 / -1;
+  flex-direction: row !important;
+  justify-content: space-between;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid var(--rule);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.relief-wide {
+  grid-column: 1 / -1;
+  flex-direction: row !important;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.relief-wide > *,
+.relief-control > * {
+  white-space: nowrap;
+}
+/* The $1k control LP: label over value, each on one line. */
+.relief-control {
+  grid-column: 1 / -1;
+}
+.relief-tag {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  gap: 0.5rem;
+  white-space: nowrap;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  padding: 0.2rem 0.45rem;
+  background: var(--vault);
+  border: 1px solid var(--rule);
+  opacity: 0;
+  transition: opacity var(--dur-micro) var(--ease-out);
+  will-change: transform;
+}
+/* Tags are placed in px by relief/tags.ts (beside their blade, clear of each other and of the panels). */
+.relief-tag--lane {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
+}
+.relief-timeline {
+  position: absolute;
+  left: 50%;
+  bottom: 1.1rem;
+  width: min(44rem, calc(100% - 4rem));
+  transform: translateX(-12%);
+  /* A ground of its own, so the ridges never run through the marks. */
+  padding: 0.35rem 0.8rem 0.5rem;
+  background: var(--vault);
+  border: 1px solid var(--rule);
+  font-size: 0.64rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--paper-mute);
+}
+.relief-track {
+  position: relative;
+  height: 1.6rem;
+  border-bottom: 1px solid var(--rule-strong);
+}
+.relief-needle {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--serial);
+  transform-origin: left;
+  transform: scaleX(0);
+}
+.relief-mark {
+  position: absolute;
+  bottom: 0.35rem;
+  padding-left: 0.35rem;
+  border-left: 1px solid var(--rule-strong);
+  line-height: 1;
+  padding-top: 0.6rem;
+}
+.relief-ends {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 0.4rem;
+}
+
+@media (max-width: 1023px) {
+  .relief-readout {
+    right: 1rem;
+    top: 0.75rem;
+    width: auto;
+    left: 1rem;
+    grid-template-columns: repeat(3, auto);
+    gap: 0.4rem 1rem;
+    padding: 0.6rem 0.75rem;
+  }
+  .relief-wide,
+  .relief-control {
+    display: none !important;
+  }
+  .relief-timeline {
+    display: none;
+  }
+}
+@media (max-width: 767px) {
+  /* Phones: one line of instrument (the act, the time, the gap); the blade tags carry pool and fair value. */
+  .relief-readout {
+    grid-template-columns: 1fr auto;
+    top: 0.6rem;
+    padding: 0.45rem 0.7rem;
+  }
+  /* Two classes deep, to beat `.relief-readout > div`'s 0.2rem. */
+  .relief-readout > .relief-readout-head {
+    grid-column: 1;
+    border-bottom: 0;
+    padding-bottom: 0;
+    justify-content: flex-start;
+    gap: 0.75rem;
+  }
+  .relief-readout > div:not(.relief-readout-head):not(.relief-gap) {
+    display: none;
+  }
+  .relief-gap {
+    flex-direction: row !important;
+    gap: 0.5rem !important;
+    align-items: baseline;
+  }
+  .relief-tag--lane {
+    display: none;
+  }
+}
+
+/* ---- Reduced motion: no stage, no scrub; the static engraving beside the hero (once), then the acts as a sheet --------- */
+@media (prefers-reduced-motion: reduce) {
+  .book-track {
+    bottom: auto;
+    height: calc(100svh - 4rem);
+  }
+  .book-stage {
+    position: relative;
+    top: 0;
+  }
+  .book-act {
+    min-height: 0;
+    padding-bottom: 0;
+  }
+  .book-panel {
+    position: relative;
+    top: auto;
+    bottom: auto;
+  }
+  /* The five acts as a sheet of certificates. */
+  .book-acts {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 21rem), 1fr));
+    gap: 1rem;
+    max-width: 90rem;
+    margin: 0 auto;
+    padding: 0 1rem 5rem;
+  }
+  .book-acts .book-panel {
+    height: 100%;
+    padding: 0 !important;
+  }
+  .book-acts article {
+    max-width: none;
+    height: 100%;
+  }
+  .dd-hero-line > span,
+  .dd-hero-fade {
+    animation: none;
+  }
+  .dd-cue-line::after {
+    animation: none;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) and (min-width: 768px) {
+  .book-acts {
+    padding: 0 2rem 6rem;
+  }
+}

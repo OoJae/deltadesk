@@ -18,7 +18,8 @@
   --paper-dim: #a7a293; /* secondary text. 7.65:1 on vault, 7.04:1 on vault-2 */
   --paper-mute: #8f8a7c; /* tertiary text, captions. 5.67:1 on vault, 5.21:1 on vault-2, 4.75:1 on vault-3 */
   --rule: rgba(237, 230, 214, 0.14); /* hairlines, engraving strokes at rest */
-  --rule-strong: rgba(237, 230, 214, 0.28); /* hover / emphasised hairlines */
+  --rule-strong: rgba(237, 230, 214, 0.28); /* hover / emphasised hairlines. Decorative only: 2.19:1 on vault */
+  --field: var(--paper-mute); /* form-control border at rest: 5.67:1 on vault, 4.75:1 on vault-3 (WCAG 1.4.11 ≥ 3:1) */
   --serial: #e4472b; /* THE accent: fair value, the gap, primary CTA, focus. 4.87:1 on vault */
   --serial-ink: #0a0d0c; /* text on a serial fill (4.87:1); paper on serial is only 3.23:1, never use it for text */
 
@@ -86,6 +87,7 @@
   --color-paper-mute: var(--paper-mute);
   --color-rule: var(--rule);
   --color-rule-strong: var(--rule-strong);
+  --color-field: var(--field);
   --color-serial: var(--serial);
   --color-serial-ink: var(--serial-ink);
 
@@ -156,6 +158,20 @@ body {
   outline-offset: 3px;
 }
 
+/* Text fields: the border is the only cue that the field exists (a vault-3 fill is 1.19:1 on vault), so it must
+   clear 3:1 (WCAG 1.4.11). Hairline roles are decorative and fail that, so inside a text-entry control they resolve
+   to the field border: --field (paper-mute) at rest, paper-dim on hover and focus. `border-rule-strong` on an input
+   therefore renders the field border. For new fields write `border-field` directly. */
+:where(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="hidden"], [type="button"], [type="submit"], [type="reset"], [type="image"]), textarea, select) {
+  --rule: var(--field);
+  --rule-strong: var(--field);
+}
+:where(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="hidden"], [type="button"], [type="submit"], [type="reset"], [type="image"]), textarea, select):is(:hover, :focus-visible) {
+  --rule: var(--paper-dim);
+  --rule-strong: var(--paper-dim);
+  --field: var(--paper-dim);
+}
+
 /* Every number is Plex Mono, tabular. `.tabular` is the legacy class; `.num` is the brand one. */
 .tabular,
 .num {
@@ -215,7 +231,9 @@ body {
 }
 
 @layer components {
-/* Ledger table: hairline rows, mono tabular numbers, labels in the header. */
+/* Ledger table: hairline rows, mono tabular numbers, labels in the header. The stronger rule closes the column
+   header only; a row header (<th scope="row"> in tbody) sits on the same 14% rule as the rest of its row, and takes
+   the row's hover wash with it. */
 .ledger-table {
   width: 100%;
   border-collapse: collapse;
@@ -230,7 +248,10 @@ body {
   color: var(--paper-mute);
   text-align: left;
   padding: 0.6rem 0.75rem;
-  border-bottom: 1px solid var(--rule-strong);
+  border-bottom: 1px solid var(--rule);
+}
+.ledger-table thead th {
+  border-bottom-color: var(--rule-strong);
 }
 .ledger-table td {
   padding: 0.6rem 0.75rem;
@@ -241,7 +262,7 @@ body {
   text-align: right;
   font-family: var(--font-mono);
 }
-.ledger-table tbody tr:hover td {
+.ledger-table tbody tr:hover > :is(td, th) {
   background: color-mix(in srgb, var(--paper) 3%, transparent);
 }
 
@@ -348,12 +369,19 @@ body {
   --dd-sheen: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 18 18'%3E%3Cg fill='none' stroke='%23ede6d6' stroke-opacity='.22' stroke-width='.6'%3E%3Cpath d='M0 4.5c2.25-3 4.5-3 6.75 0s4.5 3 6.75 0 4.5-3 4.5-3M0 9c2.25-3 4.5-3 6.75 0s4.5 3 6.75 0 4.5-3 4.5-3M0 13.5c2.25-3 4.5-3 6.75 0s4.5 3 6.75 0 4.5-3 4.5-3'/%3E%3C/g%3E%3C/svg%3E");
   color: var(--paper);
   box-shadow: inset 0 0 0 1px var(--rule-strong);
-  transition:
-    transform var(--dur-micro) var(--ease-out),
-    box-shadow var(--dur-micro) var(--ease-out);
 }
-.dd-btn--ghost:hover {
+/* Hover brightens the hairline by fading a second, paper-dim hairline in: opacity only, never box-shadow. */
+.dd-btn--ghost::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
   box-shadow: inset 0 0 0 1px var(--paper-dim);
+  opacity: 0;
+  transition: opacity var(--dur-micro) var(--ease-out);
+}
+.dd-btn--ghost:hover::before {
+  opacity: 1;
 }
 .dd-btn--link {
   color: var(--paper);
@@ -535,6 +563,20 @@ body {
   to {
     opacity: 0;
   }
+}
+
+/* ==============================================================================================================
+   Motion rule, enforced: only transform and opacity move.
+   Unlayered on purpose, so it outranks every Tailwind utility. The colour, shadow and catch-all transition utilities
+   are narrowed to transform + opacity site-wide: hover colour changes are instant, and a focus ring lands solid
+   serial on its first frame (transition-colors includes outline-color, which used to tween in from currentColor).
+   ============================================================================================================== */
+
+.transition,
+.transition-all,
+.transition-colors,
+.transition-shadow {
+  transition-property: transform, translate, scale, rotate, opacity;
 }
 
 /* ==============================================================================================================

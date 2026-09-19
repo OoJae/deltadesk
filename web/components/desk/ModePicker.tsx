@@ -3,9 +3,11 @@
 import { useState } from "react";
 import { getAddress, type Address } from "viem";
 import { deskApi } from "@/lib/desk/api";
+import { short } from "@/lib/desk/format";
 import type { EthereumWallet } from "@/lib/desk/tx";
 import { MODES, type DeskMode } from "@/lib/desk/types";
 import { useAction } from "./hooks";
+import { useDeskStamp } from "./stamp";
 import { TxLine } from "./ui";
 
 /**
@@ -15,6 +17,7 @@ import { TxLine } from "./ui";
 export default function ModePicker({ lane, current, vault, jwt, onChanged }: { lane: Address; current?: string | null; vault: EthereumWallet | null; jwt: () => string | null; onChanged?: (m: DeskMode) => void }) {
   const [picked, setPicked] = useState<DeskMode | null>(null);
   const action = useAction();
+  const { stamp } = useDeskStamp();
   const mode = (picked ?? current ?? "advisory") as DeskMode;
 
   const choose = (m: DeskMode) =>
@@ -28,6 +31,7 @@ export default function ModePicker({ lane, current, vault, jwt, onChanged }: { l
       if (!r.ok) throw new Error(`Agent refused the mode change: ${r.error}`);
       setPicked(m);
       onChanged?.(m);
+      stamp({ kind: "signed", title: `Mode set to ${m}`, detail: `Signed by your Vault · lane ${short(lane)}`, serial: nonce });
     });
 
   return (
@@ -43,13 +47,20 @@ export default function ModePicker({ lane, current, vault, jwt, onChanged }: { l
               aria-checked={on}
               disabled={!m.enabled || action.busy || on}
               onClick={() => choose(m.mode)}
-              className={`rounded-lg border p-3 text-left text-sm transition disabled:cursor-default ${on ? "border-[var(--accent)] bg-surface-2" : "border-[var(--ring)] hover:bg-surface-2"} ${!m.enabled ? "opacity-50" : ""}`}
+              className={`group relative border px-3.5 py-3 text-left text-sm transition-[transform,background-color,border-color] duration-200 ease-out active:scale-[0.98] disabled:cursor-default disabled:active:scale-100 ${on ? "border-paper-dim bg-vault-3" : "border-rule-strong bg-vault enabled:hover:border-paper-dim enabled:hover:bg-vault-3"} ${!m.enabled ? "opacity-50" : ""}`}
             >
-              <div className="flex items-center justify-between font-semibold">
+              <span className="flex items-center justify-between gap-2 font-medium text-paper">
                 {m.label}
-                {on && <span className="text-xs font-bold text-[var(--accent)]">✓ current</span>}
-              </div>
-              <div className="mt-1 text-xs text-ink-2">{m.note}</div>
+                {on ? (
+                  <span className="label inline-flex items-center gap-1.5 text-paper">
+                    <span aria-hidden className="inline-block h-2 w-2 bg-paper" />
+                    current
+                  </span>
+                ) : (
+                  <span aria-hidden className="inline-block h-2 w-2 border border-paper-mute" />
+                )}
+              </span>
+              <span className="mt-1.5 block text-[0.8rem] leading-snug text-paper-dim">{m.note}</span>
             </button>
           );
         })}

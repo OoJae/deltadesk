@@ -41,7 +41,7 @@ export default function RangeStrip({ s }: { s: LaneState }) {
   const rows = s.positions.map((p) => ({ ...p, lo: tickToPrice(p.tickUpper), hi: tickToPrice(p.tickLower) }));
 
   const xs = [...(band ? [band.lo, band.hi] : []), ...(pool != null ? [pool] : []), ...rows.flatMap((r) => [r.lo, r.hi])];
-  if (!xs.length) return <p className="text-sm text-ink-2">No price reference yet: the pool, the fence and the positions are all unavailable.</p>;
+  if (!xs.length) return <p className="text-[0.9rem] text-paper-dim">No price reference yet: the pool, the fence and the positions are all unavailable.</p>;
 
   let lo = Math.min(...xs), hi = Math.max(...xs);
   const pad = Math.max((hi - lo) * 0.12, (pool ?? lo) * 0.004);
@@ -58,19 +58,19 @@ export default function RangeStrip({ s }: { s: LaneState }) {
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-2" aria-hidden>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[0.78rem] text-paper-dim" aria-hidden>
         {rows.map((r) => (
-          <span key={r.slot} className="inline-flex items-center gap-1.5">
-            <span className="h-2.5 w-4 rounded-sm" style={{ background: SLOT_COLOR[r.slot] }} />
+          <span key={r.slot} className="inline-flex items-center gap-2">
+            <span className="h-2 w-4" style={{ background: SLOT_COLOR[r.slot] }} />
             Position slot {r.slot}
           </span>
         ))}
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2.5 w-4 rounded-sm bg-[var(--div-mid)] ring-1 ring-[var(--axis)]" />
+        <span className="inline-flex items-center gap-2">
+          <span className="h-2.5 w-4 bg-[var(--div-mid)] ring-1 ring-[var(--axis)]" />
           Placement band (Chainlink ±{s.ref?.band ?? "–"} ticks)
         </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-3 w-0.5 bg-[var(--text-primary)]" />
+        <span className="inline-flex items-center gap-2">
+          <span className="h-3 w-px bg-paper" />
           Pool price
         </span>
       </div>
@@ -82,7 +82,7 @@ export default function RangeStrip({ s }: { s: LaneState }) {
               <g>
                 <rect x={x(band.lo)} y={H.top - 16} width={Math.max(x(band.hi) - x(band.lo), 1)} height={nRows * H.row + 16} fill="var(--div-mid)" />
                 <line x1={x(band.mid)} x2={x(band.mid)} y1={H.top - 16} y2={axisY} stroke="var(--axis)" strokeWidth={1} />
-                <text x={x(band.mid)} y={H.top - 20} textAnchor="middle" className="fill-[var(--text-muted)] text-[10px]">
+                <text x={x(band.mid)} y={H.top - 20} textAnchor="middle" className="fill-[var(--text-muted)] font-mono text-[10px]">
                   Chainlink {band.mid.toFixed(2)}
                 </text>
               </g>
@@ -91,18 +91,18 @@ export default function RangeStrip({ s }: { s: LaneState }) {
             {ticks.map((t) => (
               <g key={t}>
                 <line x1={x(t)} x2={x(t)} y1={axisY} y2={axisY + 4} stroke="var(--axis)" strokeWidth={1} />
-                <text x={x(t)} y={axisY + 16} textAnchor="middle" className="tabular fill-[var(--text-muted)] text-[10px]">
+                <text x={x(t)} y={axisY + 16} textAnchor="middle" className="tabular fill-[var(--text-muted)] font-mono text-[10px]">
                   {t.toLocaleString("en-US", { maximumFractionDigits: 2 })}
                 </text>
               </g>
             ))}
             {rows.map((r, i) => (
-              <rect key={r.slot} x={x(r.lo)} y={H.top + i * H.row + 16} width={Math.max(x(r.hi) - x(r.lo), 2)} height={10} rx={4} fill={SLOT_COLOR[r.slot]} opacity={hover == null || hover === i ? 1 : 0.5} />
+              <rect key={r.slot} x={x(r.lo)} y={H.top + i * H.row + 16} width={Math.max(x(r.hi) - x(r.lo), 2)} height={10} fill={SLOT_COLOR[r.slot]} opacity={hover == null || hover === i ? 1 : 0.5} />
             ))}
             {pool != null && (
               <g>
-                <line x1={x(pool)} x2={x(pool)} y1={H.top - 8} y2={axisY} stroke="var(--text-primary)" strokeWidth={2} strokeLinecap="round" />
-                <circle cx={x(pool)} cy={H.top - 8} r={4} fill="var(--text-primary)" stroke="var(--surface-1)" strokeWidth={2} />
+                <line x1={x(pool)} x2={x(pool)} y1={H.top - 8} y2={axisY} stroke="var(--paper)" strokeWidth={1.5} />
+                <rect x={x(pool) - 3.5} y={H.top - 11.5} width={7} height={7} transform={`rotate(45 ${x(pool)} ${H.top - 8})`} fill="var(--paper)" stroke="var(--vault-2)" strokeWidth={2} />
               </g>
             )}
             {rows.map((r, i) => {
@@ -119,7 +119,7 @@ export default function RangeStrip({ s }: { s: LaneState }) {
                   paintOrder="stroke"
                   stroke="var(--surface-1)"
                   strokeWidth={3}
-                  className="fill-[var(--text-secondary)] text-[11px]"
+                  className="fill-[var(--text-secondary)] font-mono text-[11px]"
                 >
                   #{r.tokenId.toString()} · {inRange ? "in range" : "out of range"}
                 </text>
@@ -144,11 +144,11 @@ export default function RangeStrip({ s }: { s: LaneState }) {
           </svg>
         )}
         {hovered && (
-          <div className="pointer-events-none absolute right-0 top-0 rounded-lg border border-[var(--ring)] bg-surface-1 px-3 py-2 text-xs shadow-sm">
-            <div className="tabular font-semibold">
+          <div className="pointer-events-none absolute right-0 top-0 border border-rule-strong bg-vault px-3 py-2 text-xs">
+            <div className="font-mono font-medium tabular text-paper">
               {hovered.lo.toFixed(2)} – {hovered.hi.toFixed(2)}
             </div>
-            <div className="text-ink-2">slot {hovered.slot} · NFT #{hovered.tokenId.toString()}</div>
+            <div className="text-paper-dim">slot {hovered.slot} · NFT #{hovered.tokenId.toString()}</div>
           </div>
         )}
       </div>
@@ -160,39 +160,39 @@ export default function RangeStrip({ s }: { s: LaneState }) {
 
 /** The table twin of the chart: every value is readable without hovering. */
 function PositionsTable({ s }: { s: LaneState }) {
-  if (!s.positions.length) return <p className="text-sm text-ink-2">No open positions. Idle balances sit in the lane until the agent (or you) places a range.</p>;
+  if (!s.positions.length) return <p className="border-t border-rule pt-4 text-[0.9rem] text-paper-dim">No open positions. Idle balances sit in the lane until the agent (or you) places a range.</p>;
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[520px] text-left text-sm">
-        <thead className="text-xs text-muted">
+    <div className="-mx-5 overflow-x-auto md:-mx-6">
+      <table className="ledger-table min-w-[560px] text-[0.85rem]">
+        <thead>
           <tr>
-            <th className="py-1 pr-3 font-medium">Slot</th>
-            <th className="py-1 pr-3 font-medium">NFT</th>
-            <th className="py-1 pr-3 font-medium">Range (USDG/NVDA)</th>
-            <th className="py-1 pr-3 font-medium">Width</th>
-            <th className="py-1 pr-3 font-medium">State</th>
-            <th className="py-1 pr-3 text-right font-medium">≈ {LANE_A.sym0}</th>
-            <th className="py-1 text-right font-medium">≈ {LANE_A.sym1}</th>
+            <th className="pl-5 md:pl-6">Slot</th>
+            <th>NFT</th>
+            <th>Range (USDG/NVDA)</th>
+            <th>Width</th>
+            <th>State</th>
+            <th className="n">≈ {LANE_A.sym0}</th>
+            <th className="n pr-5 md:pr-6">≈ {LANE_A.sym1}</th>
           </tr>
         </thead>
-        <tbody className="tabular">
+        <tbody className="font-mono tabular text-paper">
           {s.positions.map((p) => {
             const inRange = s.poolTick != null && s.poolTick >= p.tickLower && s.poolTick < p.tickUpper;
             const amt = s.poolTick != null ? positionAmounts(p.liquidity, p.tickLower, p.tickUpper, s.poolTick) : null;
             return (
-              <tr key={p.slot} className="border-t border-grid">
-                <td className="py-1.5 pr-3">
-                  <span className="mr-1.5 inline-block h-2 w-2 rounded-full" style={{ background: SLOT_COLOR[p.slot] }} aria-hidden />
+              <tr key={p.slot}>
+                <td className="pl-5 md:pl-6">
+                  <span className="mr-2 inline-block h-2 w-2 align-middle" style={{ background: SLOT_COLOR[p.slot] }} aria-hidden />
                   {p.slot}
                 </td>
-                <td className="py-1.5 pr-3">#{p.tokenId.toString()}</td>
-                <td className="py-1.5 pr-3">
+                <td>#{p.tokenId.toString()}</td>
+                <td>
                   {tickToPrice(p.tickUpper).toFixed(2)} – {tickToPrice(p.tickLower).toFixed(2)}
                 </td>
-                <td className="py-1.5 pr-3">{p.tickUpper - p.tickLower} ticks</td>
-                <td className="py-1.5 pr-3">{p.liquidity === BigInt(0) ? "empty" : inRange ? "in range" : "out of range"}</td>
-                <td className="py-1.5 pr-3 text-right">{amt ? fmtUnits(BigInt(Math.floor(amt.a0)), LANE_A.dec0, 2) : "–"}</td>
-                <td className="py-1.5 text-right">{amt ? fmtUnits(BigInt(Math.floor(amt.a1)), LANE_A.dec1, 5) : "–"}</td>
+                <td>{p.tickUpper - p.tickLower} ticks</td>
+                <td className="font-sans">{p.liquidity === BigInt(0) ? "empty" : inRange ? "in range" : "out of range"}</td>
+                <td className="n">{amt ? fmtUnits(BigInt(Math.floor(amt.a0)), LANE_A.dec0, 2) : "–"}</td>
+                <td className="n pr-5 md:pr-6">{amt ? fmtUnits(BigInt(Math.floor(amt.a1)), LANE_A.dec1, 5) : "–"}</td>
               </tr>
             );
           })}

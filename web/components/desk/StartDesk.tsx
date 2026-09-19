@@ -2,10 +2,16 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { getAddress, isAddress, type Address, type Hex } from "viem";
+import { getAddress, isAddress, type Address, type Hash, type Hex } from "viem";
+import { Button } from "@/components/brand/Button";
+import { Guilloche } from "@/components/brand/Guilloche";
+import { Label } from "@/components/brand/Label";
+import { Serial } from "@/components/brand/Serial";
+import { StampMark } from "@/components/brand/StampToast";
+import { CHAIN_SERIAL } from "@/components/brand/tokens";
 import { deskApi } from "@/lib/desk/api";
 import { DEFAULT_CAPS, capsRows } from "@/lib/desk/caps";
-import { CHAIN_ID, KIND_V3_LP, LANE_A } from "@/lib/desk/chain";
+import { CHAIN_ID, KIND_V3_LP, LANE_A, addressUrl, txUrl } from "@/lib/desk/chain";
 import { DESK_FACTORY, DESK_GUARDIAN, GAS_TARGET_WEI } from "@/lib/desk/config";
 import { createOrList, judge, pendingText, preflight } from "@/lib/desk/create";
 import { fmtEth, fmtUnits, fmtUsd, isZeroAddr, short } from "@/lib/desk/format";
@@ -28,8 +34,13 @@ import { useDeskSession } from "./context";
 import { DYNAMIC_SLOW_HINT, useAction, usePoll, useSlow, useStoredState } from "./hooks";
 import ModePicker from "./ModePicker";
 import type { DeskSession } from "./session";
-import { Addr, Btn, Card, Meter, Notice, Status, TxLine, type Tone } from "./ui";
+import { useDeskStamp } from "./stamp";
+import { Addr, Blank, Btn, Card, Field, Meter, Notice, Pending, Status, StatusIcon, TxLine, type Tone } from "./ui";
 import VaultAlarm from "./VaultAlarm";
+
+/** Body copy inside a step: paper-dim, a readable measure. */
+const P = "max-w-[68ch] text-[0.95rem] leading-relaxed text-paper-dim [&_strong]:font-medium [&_strong]:text-paper";
+const CODE = "font-mono text-[0.88em] text-paper";
 
 type WizardState = {
   operator: Address | null;
@@ -90,8 +101,8 @@ export default function StartDesk() {
   if (!session)
     return (
       <Notice tone="warning" title="Dynamic not configured">
-        Set <code className="font-mono">NEXT_PUBLIC_DYNAMIC_ENV_ID</code> to the Dynamic sandbox environment id and rebuild. Sign-in, the Vault and the Operator wallets all come from
-        Dynamic&apos;s embedded wallets. Existing desks can still be viewed read-only at <code className="font-mono">/desk/&lt;lane address&gt;</code>.
+        Set <code className={CODE}>NEXT_PUBLIC_DYNAMIC_ENV_ID</code> to the Dynamic sandbox environment id and rebuild. Sign-in, the Vault and the Operator wallets all come from
+        Dynamic&apos;s embedded wallets. Existing desks can still be viewed read-only at <code className={CODE}>/desk/&lt;lane address&gt;</code>.
       </Notice>
     );
   return <Wizard session={session} />;
@@ -103,6 +114,7 @@ function Wizard({ session }: { session: DeskSession }) {
   const [stored, set] = useStoredState<WizardState>(vaultAddr ? `deltadesk:wizard:${vaultAddr.toLowerCase()}` : null, INITIAL);
   const S = vaultAddr ? stored : INITIAL;
   const operator = S.operator;
+  const { stamp } = useDeskStamp();
 
   const factoryAddr = DESK_FACTORY;
   const factory = usePoll(factoryAddr && vaultAddr ? () => readFactory(factoryAddr, vaultAddr) : null, 15_000, `factory:${vaultAddr}`);
@@ -176,7 +188,18 @@ function Wizard({ session }: { session: DeskSession }) {
           />
         );
       case 5:
-        return <DelegateStep session={session} operator={operator} kind={S.operatorKind} onConfirmed={(op) => set({ agentDelegation: op })} />;
+        return (
+          <DelegateStep
+            session={session}
+            operator={operator}
+            kind={S.operatorKind}
+            onConfirmed={(op) => {
+              const fresh = !same(S.agentDelegation, op);
+              set({ agentDelegation: op });
+              if (fresh) stamp({ kind: "signed", title: "Delegation confirmed", detail: `desk-agent holds the Operator's key share · ${short(op)}`, serial: op, href: addressUrl(op) });
+            }}
+          />
+        );
       case 6:
         return <FundStep lane={S.lane} onDone={() => set({ fundAck: true })} />;
       case 7:
@@ -191,20 +214,20 @@ function Wizard({ session }: { session: DeskSession }) {
       case 1:
         return operator && (
           <>
-            <Addr address={operator} /> <span className="text-xs text-muted">{S.operatorKind === "server" ? "DeltaDesk server wallet (Plan B)" : "embedded wallet"}</span>
+            <Addr address={operator} /> <span className="text-xs text-paper-mute">{S.operatorKind === "server" ? "DeltaDesk server wallet (Plan B)" : "embedded wallet"}</span>
           </>
         );
       case 2:
-        return <span className="tabular text-ink-2">Vault {fmtEth(vaultEth)} · Operator {fmtEth(operatorEth)}</span>;
+        return <span className="font-mono text-[0.8rem] tabular text-paper-dim">Vault {fmtEth(vaultEth)} · Operator {fmtEth(operatorEth)}</span>;
       case 3:
       case 4:
         return S.predicted && <Addr address={S.lane ?? S.predicted} />;
       case 5:
-        return <span className="text-ink-2">{S.operatorKind === "server" ? "not needed (Plan B)" : "Operator delegated and confirmed by desk-agent; Vault not delegated"}</span>;
+        return <span className="text-paper-dim">{S.operatorKind === "server" ? "not needed (Plan B)" : "Operator delegated and confirmed by desk-agent; Vault not delegated"}</span>;
       case 6:
-        return <span className="text-ink-2">funded</span>;
+        return <span className="text-paper-dim">funded</span>;
       case 7:
-        return <span className="text-ink-2">registered</span>;
+        return <span className="text-paper-dim">registered</span>;
     }
   };
 
@@ -212,27 +235,28 @@ function Wizard({ session }: { session: DeskSession }) {
   const desks = useYourDesks(lanes, vaultAddr, session, operator);
   // VaultAlarm explains why: with these settings on, Dynamic may offer to delegate the Vault, so no setup step runs.
   const blocked = session.unsafeDelegationSettings.length > 0;
+  const complete = active === -1;
   return (
     <div className="space-y-6">
       <VaultAlarm session={session} />
       {!DESK_FACTORY && !blocked && (
         <Notice tone="warning" title="Lane factory not deployed yet">
-          <code className="font-mono">NEXT_PUBLIC_DESK_FACTORY</code> is unset. You can sign in, create the Operator and top up gas now; lane creation unlocks once the factory is deployed on
+          <code className={CODE}>NEXT_PUBLIC_DESK_FACTORY</code> is unset. You can sign in, create the Operator and top up gas now; lane creation unlocks once the factory is deployed on
           Robinhood Chain.
         </Notice>
       )}
       {lanes.length > 0 && (
-        <Card title="Your desks">
+        <Card title="Your desks" label="Listed by the factory for your Vault">
           {!desks.checked ? (
-            <p className="text-sm text-ink-2">{desks.error ? `Could not check your desks on-chain: ${desks.error}` : "Checking your desks on-chain…"}</p>
+            <p className="text-sm text-paper-dim">{desks.error ? `Could not check your desks on-chain: ${desks.error}` : "Checking your desks on-chain…"}</p>
           ) : (
             <>
               {desks.mine.length > 0 ? (
-                <ul className="divide-y divide-[var(--grid)]">
+                <ul className="divide-y divide-rule border-y border-rule">
                   {desks.mine.map((l) => (
-                    <li key={l} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                    <li key={l} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
                       <Addr address={l} />
-                      <div className="flex gap-2">
+                      <div className="flex items-center gap-4">
                         {!blocked && !same(S.lane, l) && (
                           <Btn kind="ghost" onClick={() => resume(l)}>
                             Continue setup
@@ -244,28 +268,35 @@ function Wizard({ session }: { session: DeskSession }) {
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-ink-2">None of the lanes listed for your Vault has the roles this setup uses.</p>
+                <p className="text-sm text-paper-dim">None of the lanes listed for your Vault has the roles this setup uses.</p>
               )}
               {desks.other.length > 0 && (
-                <details className="rounded-lg bg-surface-2 p-3 text-sm">
-                  <summary className="cursor-pointer font-medium">
-                    {desks.other.length} other lane{desks.other.length > 1 ? "s" : ""} listed for your Vault
+                <details className="group border border-rule bg-vault text-sm">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3.5 py-3 font-medium text-paper [&::-webkit-details-marker]:hidden">
+                    <span>
+                      {desks.other.length} other lane{desks.other.length > 1 ? "s" : ""} listed for your Vault
+                    </span>
+                    <span aria-hidden className="font-mono text-paper-mute transition-transform duration-300 ease-out group-open:rotate-45">
+                      +
+                    </span>
                   </summary>
-                  <p className="mt-2 text-ink-2">
-                    Your Vault listed these, but their owner, operator or guardian is not what this setup uses, so setup can&apos;t continue on them. Open one to review it
-                    or withdraw.
-                  </p>
-                  <ul className="mt-2 divide-y divide-[var(--grid)]">
-                    {desks.other.map((o) => (
-                      <li key={o.lane} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                        <div className="min-w-0 space-y-1">
-                          <Addr address={o.lane} />
-                          <div className="text-xs text-ink-2">{o.why}</div>
-                        </div>
-                        <OpenLink lane={o.lane} />
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="border-t border-rule px-3.5 pb-1">
+                    <p className="mt-3 text-paper-dim">
+                      Your Vault listed these, but their owner, operator or guardian is not what this setup uses, so setup can&apos;t continue on them. Open one to review it
+                      or withdraw.
+                    </p>
+                    <ul className="mt-2 divide-y divide-rule">
+                      {desks.other.map((o) => (
+                        <li key={o.lane} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+                          <div className="min-w-0 space-y-1">
+                            <Addr address={o.lane} />
+                            <div className="text-xs text-paper-dim">{o.why}</div>
+                          </div>
+                          <OpenLink lane={o.lane} />
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 </details>
               )}
             </>
@@ -275,45 +306,32 @@ function Wizard({ session }: { session: DeskSession }) {
       )}
 
       {!blocked && (
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
-          <ol className="min-w-0 space-y-3">
-            {STEPS.map((title, i) => {
-              const state = active === -1 || i < active ? "done" : i === active ? "active" : "locked";
-              return (
-                <Step key={title} n={i + 1} title={title} state={state} summary={state === "done" ? summary(i) : null}>
-                  {state === "active" && stepBody(i)}
-                </Step>
-              );
-            })}
-            {active === -1 && S.lane && (
-              <Card>
+        <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,25rem)] xl:gap-16">
+          <div className="min-w-0 space-y-6">
+            <ol aria-label="Setup, eight steps in order" className="border-b border-rule">
+              {STEPS.map((title, i) => {
+                const state = complete || i < active ? "done" : i === active ? "active" : "locked";
+                return (
+                  <Step key={title} n={i + 1} of={STEPS.length} title={title} state={state} summary={state === "done" ? summary(i) : null}>
+                    {state === "active" && stepBody(i)}
+                  </Step>
+                );
+              })}
+            </ol>
+            {complete && S.lane && (
+              <Card label="All eight steps done">
                 <Status tone="good">Your desk is set up.</Status>
-                <Link href={`/desk/${S.lane}`} className="inline-flex min-h-10 items-center rounded-lg bg-[var(--accent)] px-4 text-sm font-medium text-white hover:opacity-90">
-                  Open your desk →
-                </Link>
+                <div>
+                  <Button href={`/desk/${S.lane}`} prefetch={false} trailing="→">
+                    Open your desk
+                  </Button>
+                </div>
               </Card>
             )}
-          </ol>
+          </div>
 
-          <aside className="space-y-4">
-            <Card title="What you are creating">
-              <dl className="space-y-2 text-sm">
-                <Row label="Vault (owner)">{vaultAddr ? <Addr address={vaultAddr} /> : "sign in"}</Row>
-                <Row label="Operator (agent)">{operator ? <Addr address={operator} /> : "step 2"}</Row>
-                <Row label="Lane">{S.lane || S.predicted ? <Addr address={(S.lane ?? S.predicted)!} /> : "step 4"}</Row>
-                <Row label="Guardian">{isZeroAddr(DESK_GUARDIAN) ? "none" : <Addr address={DESK_GUARDIAN} />}</Row>
-                <Row label="Pool">NVDA/USDG 0.05%</Row>
-              </dl>
-              <p className="text-xs text-ink-2">The Vault owns everything and is the only place value can leave to. The Operator can only place, trim and exit ranges inside these caps:</p>
-              <dl className="divide-y divide-[var(--grid)] text-sm">
-                {capsRows(DEFAULT_CAPS).map((r) => (
-                  <div key={r.label} className="flex justify-between gap-3 py-1.5" title={r.note}>
-                    <dt className="text-ink-2">{r.label}</dt>
-                    <dd className="text-right font-semibold">{r.value}</dd>
-                  </div>
-                ))}
-              </dl>
-            </Card>
+          <aside className="lg:sticky lg:top-24 lg:self-start">
+            <Certificate vault={vaultAddr} operator={operator} lane={S.lane ?? S.predicted} issued={complete && S.lane ? S.lane : null} />
           </aside>
         </div>
       )}
@@ -321,11 +339,64 @@ function Wizard({ session }: { session: DeskSession }) {
   );
 }
 
+/**
+ * The aside is the certificate being filled in: every blank takes its value as the steps complete, and the finished
+ * desk is stamped "issued". Values are the same facts the old summary card listed.
+ */
+function Certificate({ vault, operator, lane, issued }: { vault: Address | null; operator: Address | null; lane: Address | null; issued: Address | null }) {
+  return (
+    <section aria-labelledby="desk-certificate" className="relative border border-rule bg-vault-2">
+      <Guilloche variant="border" width={12} opacity={0.38} />
+      <div className="relative space-y-7 px-6 py-8 sm:px-8 sm:py-9">
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <Label as="p">What you are creating</Label>
+            <Serial n={CHAIN_SERIAL} className="text-[0.72rem]" />
+          </div>
+          <h2 id="desk-certificate" className="font-display text-[1.7rem] leading-[1.08] tracking-[-0.01em] text-paper">
+            This certifies that your <em>Vault</em> owns the lane.
+          </h2>
+        </div>
+        <dl className="space-y-3.5">
+          <Blank label="Vault (owner)">{vault ? <Addr address={vault} /> : <Pending>sign in</Pending>}</Blank>
+          <Blank label="Operator (agent)">{operator ? <Addr address={operator} /> : <Pending>step 2</Pending>}</Blank>
+          <Blank label="Lane">{lane ? <Addr address={lane} /> : <Pending>step 4</Pending>}</Blank>
+          <Blank label="Guardian">{isZeroAddr(DESK_GUARDIAN) ? <span className="text-sm text-paper-dim">none</span> : <Addr address={DESK_GUARDIAN} />}</Blank>
+          <Blank label="Pool">
+            <span className="font-mono text-[0.85rem] text-paper">NVDA/USDG 0.05%</span>
+          </Blank>
+        </dl>
+        <div className="space-y-3">
+          <p className="text-[0.82rem] leading-relaxed text-paper-dim">
+            The Vault owns everything and is the only place value can leave to. The Operator can only place, trim and exit ranges inside these caps:
+          </p>
+          <dl className="border-t border-rule-strong">
+            {capsRows(DEFAULT_CAPS).map((r) => (
+              <div key={r.label} className="flex justify-between gap-3 border-b border-rule py-2 text-[0.85rem]" title={r.note}>
+                <dt className="text-paper-dim">{r.label}</dt>
+                <dd className="text-right font-mono tabular text-paper">{r.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+        {issued && (
+          <div className="flex items-center justify-end gap-3">
+            <Label tone="dim">Issued on Robinhood Chain</Label>
+            <div className="dd-stamp-enter">
+              <StampMark word="ISSUED" serial={short(issued)} size={92} />
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function OpenLink({ lane }: { lane: Address }) {
   return (
-    <Link href={`/desk/${lane}`} className="inline-flex min-h-10 items-center rounded-lg bg-surface-2 px-4 text-sm font-medium hover:bg-[var(--grid)]">
+    <Button href={`/desk/${lane}`} prefetch={false} variant="ghost" size="sm" trailing="→">
       Open
-    </Link>
+    </Button>
   );
 }
 
@@ -355,38 +426,41 @@ function useYourDesks(lanes: readonly Address[], vault: Address | null, session:
   };
 }
 
-function Row({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <dt className="text-ink-2">{label}</dt>
-      <dd className="min-w-0 text-right">{children}</dd>
-    </div>
-  );
-}
-
-function Step({ n, title, state, summary, children }: { n: number; title: string; state: "done" | "active" | "locked"; summary: ReactNode; children: ReactNode }) {
-  const disc =
-    state === "done" ? (
-      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--good)] text-sm font-bold text-black" aria-label="done">
-        ✓
-      </span>
-    ) : (
-      <span
-        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${state === "active" ? "bg-[var(--accent)] text-white" : "bg-surface-2 text-muted"}`}
-        aria-hidden
-      >
-        {n}
-      </span>
+/**
+ * One clause of the setup ledger. The numbers are a true sequence (each step needs the one before), so they carry the
+ * certificate's "N°". Done and locked clauses are single ruled lines (done ones show the value they filled in); the
+ * active clause lifts into a raised panel: its N° in serial red, a restrained Bodoni title, and the step's controls.
+ */
+function Step({ n, of, title, state, summary, children }: { n: number; of: number; title: string; state: "done" | "active" | "locked"; summary: ReactNode; children: ReactNode }) {
+  if (state !== "active")
+    return (
+      <li className="grid grid-cols-[3.4rem_minmax(0,1fr)] items-baseline gap-x-3 border-t border-rule py-4 sm:grid-cols-[4.25rem_minmax(0,1fr)_auto] sm:gap-x-4 sm:px-1">
+        <Serial n={n} pad={2} tone="dim" className="text-[0.75rem]" style={state === "locked" ? { color: "var(--paper-mute)" } : undefined} />
+        <h3 className={`font-display text-[1.2rem] leading-tight ${state === "locked" ? "text-paper-mute" : "text-paper-dim"}`}>{title}</h3>
+        {state === "done" && (
+          <div className="col-start-2 mt-1.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-sm sm:col-start-3 sm:mt-0 sm:justify-end">
+            {summary && <div className="min-w-0">{summary}</div>}
+            <span className="inline-flex items-center gap-1.5">
+              <StatusIcon tone="good" size={14} />
+              <span className="label text-paper-mute">Done</span>
+            </span>
+          </div>
+        )}
+      </li>
     );
   return (
-    <li className={`card p-4 ${state === "active" ? "ring-2 ring-[var(--accent)]" : ""}`} aria-current={state === "active" ? "step" : undefined}>
-      <div className="flex items-start gap-3">
-        {disc}
-        <div className="min-w-0 flex-1 space-y-3">
-          <div className="flex min-h-7 flex-wrap items-center justify-between gap-x-3 gap-y-1">
-            <h3 className={`font-semibold ${state === "locked" ? "text-muted" : ""}`}>{title}</h3>
-            {summary && <div className="min-w-0 text-sm">{summary}</div>}
-          </div>
+    <li aria-current="step" className="my-4 border border-rule-strong bg-vault-2 first:mt-0 last:mb-0">
+      <div className="grid grid-cols-[3.4rem_minmax(0,1fr)] gap-x-3 px-4 py-5 sm:grid-cols-[4.25rem_minmax(0,1fr)] sm:gap-x-4 sm:px-6 sm:py-7">
+        <div className="pt-[0.55rem]">
+          <Serial n={n} pad={2} className="text-[0.8rem]" />
+        </div>
+        <div className="min-w-0 space-y-1.5">
+          <Label as="p">
+            Current step · {n} of {of}
+          </Label>
+          <h3 className="font-display text-title text-balance text-paper">{title}</h3>
+        </div>
+        <div className="col-span-2 mt-5 animate-[dd-rise_0.8s_var(--ease-out)_both] border-t border-rule pt-5 sm:col-span-1 sm:col-start-2 sm:mt-6 sm:pt-6">
           {children}
         </div>
       </div>
@@ -397,19 +471,19 @@ function Step({ n, title, state, summary, children }: { n: number; title: string
 function SignInStep({ session }: { session: DeskSession }) {
   const action = useAction();
   const slow = useSlow(!session.sdkHasLoaded);
-  if (!session.sdkHasLoaded) return slow ? <Status tone="warning">{DYNAMIC_SLOW_HINT}</Status> : <p className="text-sm text-ink-2">Loading Dynamic…</p>;
+  if (!session.sdkHasLoaded) return slow ? <Status tone="warning">{DYNAMIC_SLOW_HINT}</Status> : <p className={P}>Loading Dynamic…</p>;
   if (!session.loggedIn)
     return (
-      <div className="space-y-3">
-        <p className="text-sm text-ink-2">Sign in with your email. Dynamic creates an embedded wallet for you: that is your <strong>Vault</strong>, the owner of the desk. It is never delegated and only needs a little gas.</p>
+      <div className="space-y-5">
+        <p className={P}>Sign in with your email. Dynamic creates an embedded wallet for you: that is your <strong>Vault</strong>, the owner of the desk. It is never delegated and only needs a little gas.</p>
         <Btn kind="primary" onClick={session.signIn}>
           Sign in with email
         </Btn>
       </div>
     );
   return (
-    <div className="space-y-3">
-      <p className="text-sm text-ink-2">Signed in{session.email ? ` as ${session.email}` : ""}, but this account has no embedded EVM wallet yet.</p>
+    <div className="space-y-5">
+      <p className={P}>Signed in{session.email ? ` as ${session.email}` : ""}, but this account has no embedded EVM wallet yet.</p>
       <Btn kind="primary" disabled={action.busy} onClick={() => action.run("Creating your Vault wallet…", session.createVault)}>
         Create Vault wallet
       </Btn>
@@ -440,22 +514,24 @@ function OperatorStep({ session, vault, onPick }: { session: DeskSession; vault:
       onPick(getAddress(a), "server");
     });
   return (
-    <div className="space-y-3">
-      <p className="text-sm text-ink-2">
+    <div className="space-y-5">
+      <p className={P}>
         A second embedded wallet that the agent signs with. On-chain it can only place, trim, collect and exit ranges inside your caps, or pause. It can never withdraw, unpause or change settings.
       </p>
       {session.others.length > 0 && (
         <div className="space-y-2">
-          <div className="text-xs text-muted">Existing embedded wallets on this account</div>
+          <Label as="div">Existing embedded wallets on this account</Label>
           {session.others.map((w) => (
-            <div key={w.address} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-2 p-2">
+            <div key={w.address} className="flex flex-wrap items-center justify-between gap-2 border border-rule bg-vault py-2 pr-2 pl-3.5">
               <Addr address={w.address} />
-              <Btn onClick={() => onPick(getAddress(w.address), "embedded")}>Use as Operator</Btn>
+              <Btn size="sm" onClick={() => onPick(getAddress(w.address), "embedded")}>
+                Use as Operator
+              </Btn>
             </div>
           ))}
         </div>
       )}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
         <Btn kind="primary" disabled={action.busy} onClick={create}>
           Create Operator wallet
         </Btn>
@@ -463,7 +539,7 @@ function OperatorStep({ session, vault, onPick }: { session: DeskSession; vault:
           Use DeltaDesk&apos;s server wallet (Plan B)
         </Btn>
       </div>
-      {planB && <p className="text-xs text-ink-2">If this Dynamic environment allows only one embedded wallet per user, use Plan B: a DeltaDesk-held 2-of-2 server wallet becomes the Operator. Your Vault still owns the lane.</p>}
+      {planB && <p className="max-w-[68ch] text-[0.82rem] leading-relaxed text-paper-dim">If this Dynamic environment allows only one embedded wallet per user, use Plan B: a DeltaDesk-held 2-of-2 server wallet becomes the Operator. Your Vault still owns the lane.</p>}
       <TxLine state={action.state} />
     </div>
   );
@@ -475,27 +551,28 @@ function GasStep({ vault, operator, vaultEth, operatorEth, onSkip }: { vault: Ad
     { label: "Operator", addr: operator, bal: operatorEth, need: GAS_TARGET_WEI.operator, why: "pays for the agent's reranges and exits" },
   ];
   return (
-    <div className="space-y-3">
-      <p className="text-sm text-ink-2">Send a little ETH on Robinhood Chain (chain {CHAIN_ID}) to both wallets. Gas is cheap (a full rerange is about $0.10–0.90); balances refresh every 4 s.</p>
-      {rows.map((r) => {
-        const ok = r.bal != null && r.bal >= r.need;
-        return (
-          <div key={r.label} className="space-y-2 rounded-lg bg-surface-2 p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="text-sm font-semibold">{r.label}</div>
-              {ok ? <Status tone="good">ready</Status> : <Status tone="warning">needs {fmtEth(r.need)}</Status>}
-            </div>
-            {r.addr && <Addr address={r.addr} full />}
-            <div className="flex justify-between text-xs text-ink-2">
-              <span>{r.why}</span>
-              <span className="tabular">
-                <strong className="text-ink">{fmtEth(r.bal)}</strong> / {fmtEth(r.need)}
-              </span>
-            </div>
-            <Meter value={Number(r.bal ?? BigInt(0))} max={Number(r.need)} label={`${r.label} gas`} />
-          </div>
-        );
-      })}
+    <div className="space-y-5">
+      <p className={P}>
+        Send a little ETH on Robinhood Chain (chain <span className="font-mono">{CHAIN_ID}</span>) to both wallets. Gas is cheap (a full rerange is about $0.10–0.90); balances
+        refresh every 4 s.
+      </p>
+      <div className="grid gap-3 xl:grid-cols-2">
+        {rows.map((r) => {
+          const ok = r.bal != null && r.bal >= r.need;
+          return (
+            <Field key={r.label} label={r.label} aside={ok ? <Status tone="good">ready</Status> : <Status tone="warning">needs {fmtEth(r.need)}</Status>}>
+              {r.addr && <Addr address={r.addr} full />}
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-xs text-paper-dim">
+                <span>{r.why}</span>
+                <span className="font-mono tabular">
+                  <strong className="font-medium text-paper">{fmtEth(r.bal)}</strong> / {fmtEth(r.need)}
+                </span>
+              </div>
+              <Meter value={Number(r.bal ?? BigInt(0))} max={Number(r.need)} label={`${r.label} gas`} />
+            </Field>
+          );
+        })}
+      </div>
       <Btn kind="ghost" onClick={onSkip}>
         Continue anyway
       </Btn>
@@ -549,7 +626,7 @@ function PredictStep({
   }, [ready, over.length, state.predicted, state.salt, owner, nLanes, impl, moved]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!DESK_FACTORY) return <Status tone="warning">Not deployed yet: set NEXT_PUBLIC_DESK_FACTORY once DeskLaneFactory is live on chain {CHAIN_ID}.</Status>;
-  if (!factory) return <p className="text-sm text-ink-2">{factoryError ? `Factory read failed: ${factoryError}` : "Reading the factory…"}</p>;
+  if (!factory) return <p className={P}>{factoryError ? `Factory read failed: ${factoryError}` : "Reading the factory…"}</p>;
   if (!factory.implementation) return <Status tone="warning">The factory has no DeskLaneV3 implementation registered yet.</Status>;
   if (!factory.poolAllowed) return <Status tone="warning">The factory has not allowed the NVDA/USDG pool yet.</Status>;
   if (over.length) return <Status tone="critical">Default caps are looser than the factory allows: {over.join(", ")}.</Status>;
@@ -560,21 +637,25 @@ function PredictStep({
       </Notice>
     );
   if (err) return <Status tone="critical">predictLane failed: {err}</Status>;
-  if (!state.predicted) return <p className="text-sm text-ink-2">Predicting your lane address…</p>;
+  if (!state.predicted) return <p className={P}>Predicting your lane address…</p>;
   return (
-    <div className="space-y-3">
+    <div className="space-y-5">
       {moved ? (
         <Notice tone="critical" title="Your lane was created at a different address">
           <div className="space-y-2">
             <p>
-              createLane put your lane at <span className="break-all font-mono">{moved.to}</span>, not at the predicted{" "}
-              <span className="break-all font-mono">{moved.from}</span> (the factory&apos;s lane implementation changed in between). The Dynamic policy allowlist you saved names
-              the predicted address, so it no longer matches: the Operator&apos;s transactions to your lane would be refused, and the allowlist names a contract that is not
-              your lane.
+              createLane put your lane at <span className="break-all font-mono text-paper">{moved.to}</span>, not at the predicted{" "}
+              <span className="break-all font-mono text-paper">{moved.from}</span> (the factory&apos;s lane implementation changed in between). The Dynamic policy allowlist you
+              saved names the predicted address, so it no longer matches: the Operator&apos;s transactions to your lane would be refused, and the allowlist names a contract that
+              is not your lane.
             </p>
             <p>
               Fix: in the policy, replace the old address with the new one as the only allowed destination, then confirm below. If you can&apos;t, do not delegate the
-              Operator; <Link href={`/desk/${moved.to}`} className="underline">open the lane</Link> and withdraw instead.
+              Operator;{" "}
+              <Link href={`/desk/${moved.to}`} prefetch={false} className="text-paper underline decoration-rule-strong underline-offset-4 hover:decoration-paper">
+                open the lane
+              </Link>{" "}
+              and withdraw instead.
             </p>
           </div>
         </Notice>
@@ -583,41 +664,61 @@ function PredictStep({
           {replaced && (
             <Notice tone="warning" title="The predicted address changed">
               The factory now predicts a new address for your lane (its lane implementation or the lane settings changed), instead of{" "}
-              <span className="break-all font-mono">{replaced}</span>. Put the new address in the policy allowlist in place of the old one.
+              <span className="break-all font-mono text-paper">{replaced}</span>. Put the new address in the policy allowlist in place of the old one.
             </Notice>
           )}
-          <p className="text-sm text-ink-2">
-            Your lane will be deployed at exactly this address (the factory salt commits to every parameter, so nobody can deploy anything else there):
-          </p>
+          <p className={P}>Your lane will be deployed at exactly this address (the factory salt commits to every parameter, so nobody can deploy anything else there):</p>
         </>
       )}
-      <div className="rounded-lg bg-surface-2 p-3">
+      <Field label="Your lane's address" aside={<Label tone="dim">chain {CHAIN_ID}</Label>}>
         <Addr address={state.predicted} full />
+      </Field>
+      <div className="space-y-3">
+        <Label as="p">In the Dynamic dashboard</Label>
+        <ol className="border-t border-rule text-[0.9rem] leading-relaxed text-paper-dim">
+          {[
+            <>Open the delegated-access policy for this environment.</>,
+            <>
+              Chain: <span className="font-mono text-paper">{CHAIN_ID}</span> only. Allowlist: this lane as the only allowed destination. Native value:{" "}
+              <span className="font-mono text-paper">0</span>.
+            </>,
+            <>
+              Turn on <code className={CODE}>blockExport</code>, so the Operator&apos;s key can never be exported. (Your Vault keeps its own export: that is your last-resort
+              exit.)
+            </>,
+            <>Save. The Operator&apos;s signatures are now refused for anything but this lane.</>,
+          ].map((item, i) => (
+            <li key={i} className="grid grid-cols-[1.75rem_minmax(0,1fr)] gap-x-2 border-b border-rule py-2.5">
+              <span aria-hidden className="font-mono text-[0.8rem] leading-[1.6rem] text-paper-mute">
+                {i + 1}.
+              </span>
+              <span>{item}</span>
+            </li>
+          ))}
+        </ol>
       </div>
-      <ol className="list-decimal space-y-1 pl-5 text-sm text-ink-2">
-        <li>In the Dynamic dashboard, open the delegated-access policy for this environment.</li>
-        <li>Chain: {CHAIN_ID} only. Allowlist: this lane as the only allowed destination. Native value: 0.</li>
-        <li>
-          Turn on <code className="font-mono">blockExport</code>, so the Operator&apos;s key can never be exported. (Your Vault keeps its own export: that is your
-          last-resort exit.)
-        </li>
-        <li>Save. The Operator&apos;s signatures are now refused for anything but this lane.</li>
-      </ol>
-      <label className="flex items-start gap-2 text-sm">
-        <input type="checkbox" className="mt-1" checked={state.policyAck} onChange={(e) => set(e.target.checked ? { policyAck: true, replaced: null } : { policyAck: false })} />
+      <label
+        className={`flex cursor-pointer items-start gap-3 border px-4 py-3.5 text-[0.9rem] leading-relaxed transition-colors ${state.policyAck ? "border-paper-dim bg-vault-3 text-paper" : "border-rule-strong bg-vault text-paper-dim hover:border-paper-dim"}`}
+      >
+        <input
+          type="checkbox"
+          className="mt-[0.2rem] h-4 w-4 shrink-0 cursor-pointer accent-[var(--paper)]"
+          checked={state.policyAck}
+          onChange={(e) => set(e.target.checked ? { policyAck: true, replaced: null } : { policyAck: false })}
+        />
         {moved ? (
           <span>
-            I replaced the old address with <span className="font-mono">{short(moved.to)}</span> in the Operator&apos;s policy allowlist, and the policy has{" "}
-            <code className="font-mono">blockExport</code> on.
+            I replaced the old address with <span className="font-mono text-paper">{short(moved.to)}</span> in the Operator&apos;s policy allowlist, and the policy has{" "}
+            <code className={CODE}>blockExport</code> on.
           </span>
         ) : replaced ? (
           <span>
-            I replaced <span className="font-mono">{short(replaced)}</span> with <span className="font-mono">{short(state.predicted)}</span> in the Operator&apos;s policy
-            allowlist, with chain {CHAIN_ID}, value 0 and <code className="font-mono">blockExport</code> on.
+            I replaced <span className="font-mono text-paper">{short(replaced)}</span> with <span className="font-mono text-paper">{short(state.predicted)}</span> in the
+            Operator&apos;s policy allowlist, with chain {CHAIN_ID}, value 0 and <code className={CODE}>blockExport</code> on.
           </span>
         ) : (
           <span>
-            I added the lane address to the Operator&apos;s policy allowlist, with chain {CHAIN_ID}, value 0 and <code className="font-mono">blockExport</code> on.
+            I added the lane address to the Operator&apos;s policy allowlist, with chain {CHAIN_ID}, value 0 and <code className={CODE}>blockExport</code> on.
           </span>
         )}
       </label>
@@ -643,6 +744,7 @@ function CreateStep({
   onRestart: () => void;
 }) {
   const action = useAction();
+  const { stamp } = useDeskStamp();
   const factory = DESK_FACTORY;
   const pf = usePoll(factory && params && predicted ? () => preflight(factory, params, predicted) : null, 4000, `create:${factory}:${predicted}:${params?.operator}`);
   const verdict = pf.data && params && predicted ? judge(pf.data, params, predicted) : null;
@@ -657,43 +759,58 @@ function CreateStep({
     action.run("Checking the lane address…", async (onHash, done) => {
       if (!session.vault || !params || !predicted || !factory) throw new Error("Missing Vault, parameters or factory.");
       // Re-checks right before signing (the poll above may be seconds old), then sends and verifies.
-      const r = await createOrList(session.vault, factory, params, predicted, onHash);
+      const sent: { hash?: Hash } = {};
+      const r = await createOrList(session.vault, factory, params, predicted, (h) => {
+        sent.hash = h;
+        onHash(h);
+      });
       if (r.kind === "moved") {
         onMoved(predicted, r.lane);
         throw new Error(`Your lane was created at ${r.lane}, not at the predicted ${predicted}. Update the Operator's policy allowlist to the new address, or do not delegate.`);
       }
       onCreated(r.lane);
-      done(
+      const note =
         r.kind === "ready"
           ? "Your lane already exists here and is listed for your Vault"
           : r.frontRun
             ? "The lane already deployed with your settings is now listed for your Vault and verified"
-            : "Lane created, listed for your Vault and verified",
-      );
+            : "Lane created, listed for your Vault and verified";
+      done(note);
+      const tx = sent.hash;
+      stamp({
+        kind: "recorded",
+        title: r.kind === "ready" ? "Lane already listed for your Vault" : r.frontRun ? "Lane listed for your Vault" : "Lane created",
+        detail: `${short(r.lane)} · owner, operator, guardian and caps verified on-chain`,
+        serial: tx ?? r.lane,
+        href: tx ? txUrl(tx) : addressUrl(r.lane),
+      });
     });
 
   return (
-    <div className="space-y-3">
-      <p className="text-sm text-ink-2">
-        Your Vault calls <code className="font-mono">createLane</code> on the factory with the caps on the right. The Vault becomes the immutable owner; the Operator gets only the agent role.
-        Afterwards the wizard checks on-chain that the lane is listed for your Vault and that its owner, operator, guardian and caps are exactly these.
+    <div className="space-y-5">
+      <p className={P}>
+        Your Vault calls <code className={CODE}>createLane</code> on the factory with the caps on the certificate. The Vault becomes the immutable owner; the Operator gets only
+        the agent role. Afterwards the wizard checks on-chain that the lane is listed for your Vault and that its owner, operator, guardian and caps are exactly these.
       </p>
       {!verdict ? (
-        <p className="text-sm text-ink-2">{pf.error ? `Chain read failed: ${pf.error}` : "Checking the predicted address…"}</p>
+        <p className={P}>{pf.error ? `Chain read failed: ${pf.error}` : "Checking the predicted address…"}</p>
       ) : verdict.kind === "ready" ? (
         <Status tone="good">Your lane already exists at the predicted address and is listed for your Vault. Continuing…</Status>
       ) : verdict.kind === "wrong" ? (
         <Notice tone="critical" title="This lane is not the one you asked for">
-          <div className="space-y-2">
-            <ul className="list-disc space-y-1 pl-5">
+          <div className="space-y-3">
+            <ul className="space-y-1.5">
               {verdict.problems.map((p) => (
-                <li key={p} className="break-words">
-                  {p}
+                <li key={p} className="grid grid-cols-[1rem_minmax(0,1fr)] break-words">
+                  <span aria-hidden className="font-mono text-paper-mute">
+                    ·
+                  </span>
+                  <span>{p}</span>
                 </li>
               ))}
             </ul>
             <p>Setup stops here: do not delegate the Operator or fund this lane.</p>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-3">
               <Btn onClick={onRestart}>Set up a new lane instead</Btn>
               {predicted && <OpenLink lane={predicted} />}
             </div>
@@ -701,7 +818,7 @@ function CreateStep({
         </Notice>
       ) : verdict.kind === "blocked" ? (
         <Notice tone="critical" title="Lane creation is blocked">
-          <div className="space-y-2">
+          <div className="space-y-3">
             <p className="break-words">{verdict.reason}</p>
             {verdict.repredict && <Btn onClick={onRepredict}>Predict again</Btn>}
           </div>
@@ -710,7 +827,7 @@ function CreateStep({
         verdict.frontRun && (
           <Notice tone="warning" title="A lane with your exact settings is already deployed here">
             Someone else deployed it (anyone may deploy a lane in your name, but only with exactly your parameters, which the address commits to). It is not in your desk list
-            yet. Sending <code className="font-mono">createLane</code> from your Vault lists that lane for you; nothing new is deployed.
+            yet. Sending <code className={CODE}>createLane</code> from your Vault lists that lane for you; nothing new is deployed.
           </Notice>
         )
       )}
@@ -809,7 +926,7 @@ function DelegateStep({ session, operator, kind, onConfirmed }: { session: DeskS
   const [sawUndelegated, setSawUndelegated] = useState(false);
   if (!sawUndelegated && kind === "embedded" && operator && session.sdkHasLoaded && opStatus !== "delegated") setSawUndelegated(true);
   const agent = useAgentDelegation(dynamicDelegated ? operator : null, sawUndelegated, session.jwt, onConfirmed);
-  if (kind === "server") return <p className="text-sm text-ink-2">Plan B: DeltaDesk&apos;s server wallet is the Operator, so there is nothing to delegate.</p>;
+  if (kind === "server") return <p className={P}>Plan B: DeltaDesk&apos;s server wallet is the Operator, so there is nothing to delegate.</p>;
   const vaultStatus = session.vault ? session.delegationOf(session.vault.address) : "unknown";
   const v = agent.view;
   const waiting = (d: AgentDelegation) => `waiting for Dynamic's webhook (${Math.round(d.waitedMs / 1000)} s)`;
@@ -827,8 +944,8 @@ function DelegateStep({ session, operator, kind, onConfirmed }: { session: DeskS
               ? { tone: "warning", text: "no delegation received yet" }
               : { tone: "neutral", text: `${waiting(v)}${v.error ? `; last check: ${v.error}` : ""}` };
   return (
-    <div className="space-y-3">
-      <p className="text-sm text-ink-2">
+    <div className="space-y-5">
+      <p className={P}>
         Delegate <strong>only the Operator</strong> to DeltaDesk, so the agent can sign for it within the lane&apos;s limits. Your Vault is never delegated. The step completes once
         desk-agent confirms it received the Operator&apos;s key share through Dynamic&apos;s webhook.
       </p>
@@ -837,14 +954,14 @@ function DelegateStep({ session, operator, kind, onConfirmed }: { session: DeskS
           Enable delegated access for embedded wallets in this Dynamic environment, then reload.
         </Notice>
       )}
-      <ul className="space-y-1 text-sm">
-        <li>
+      <ul aria-label="Delegation status" className="border-y border-rule bg-vault">
+        <li className="border-b border-rule px-3.5 py-2.5">
           <Status tone={opStatus === "delegated" ? "good" : "warning"}>Operator (Dynamic): {opStatus}</Status>
         </li>
-        <li>
+        <li className="border-b border-rule px-3.5 py-2.5">
           <Status tone={vaultStatus === "delegated" ? "critical" : "good"}>Vault: {vaultStatus === "delegated" ? "delegated (revoke it!)" : "not delegated"}</Status>
         </li>
-        <li>
+        <li className="px-3.5 py-2.5">
           <Status tone={agentLine.tone}>desk-agent: {agentLine.text}</Status>
         </li>
       </ul>
@@ -861,7 +978,7 @@ function DelegateStep({ session, operator, kind, onConfirmed }: { session: DeskS
                 hasn&apos;t reached desk-agent. Check that desk-agent is running and that the webhook URL and secret in the Dynamic dashboard point at it.
               </p>
             )}
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-3">
               <Btn
                 kind="danger"
                 disabled={action.busy || !operator}
@@ -911,30 +1028,34 @@ function FundStep({ lane, onDone }: { lane: Address | null; onDone: () => void }
   const cap = Number(DEFAULT_CAPS.maxDeployUsd6) / 1e6;
   const funded = !!d && (d.bal0 > BigInt(0) || d.bal1 > BigInt(0));
   return (
-    <div className="space-y-3">
-      <p className="text-sm text-ink-2">
-        Send USDG and NVDA on Robinhood Chain straight to the lane, from any wallet. About ${FUND_TARGET_USD} is the plan for the first live mint; one rerange deploys at most ${cap}. No swaps
-        happen in M2, so send both tokens for a two-sided range.
+    <div className="space-y-5">
+      <p className={P}>
+        Send USDG and NVDA on Robinhood Chain straight to the lane, from any wallet. About ${FUND_TARGET_USD} is the plan for the first live mint; one rerange deploys at most ${cap}.
+        No swaps happen in M2, so send both tokens for a two-sided range.
       </p>
-      <div className="rounded-lg bg-surface-2 p-3">
+      <Field label="Send to your lane" aside={<Label tone="dim">refreshes every 5 s</Label>}>
         <Addr address={lane} full />
-      </div>
-      <dl className="grid grid-cols-3 gap-2 text-sm">
-        <div>
-          <dt className="text-xs text-muted">{LANE_A.sym0}</dt>
-          <dd className="tabular font-semibold">{d ? fmtUnits(d.bal0, LANE_A.dec0, 2) : "–"}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted">{LANE_A.sym1}</dt>
-          <dd className="tabular font-semibold">{d ? fmtUnits(d.bal1, LANE_A.dec1, 5) : "–"}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted">Value (Chainlink)</dt>
-          <dd className="tabular font-semibold">{fmtUsd(value)}</dd>
-        </div>
+      </Field>
+      <dl className="grid grid-cols-3 border-y border-rule">
+        {[
+          { k: LANE_A.sym0, v: d ? fmtUnits(d.bal0, LANE_A.dec0, 2) : "–" },
+          { k: LANE_A.sym1, v: d ? fmtUnits(d.bal1, LANE_A.dec1, 5) : "–" },
+          { k: "Value (Chainlink)", v: fmtUsd(value) },
+        ].map((x, i) => (
+          <div key={x.k} className={`min-w-0 space-y-1.5 py-3 ${i ? "border-l border-rule pl-3 sm:pl-4" : ""}`}>
+            <Label as="dt">{x.k}</Label>
+            <dd className="truncate font-mono text-[1.15rem] tabular text-paper sm:text-[1.35rem]">{x.v}</dd>
+          </div>
+        ))}
       </dl>
-      <Meter value={value ?? 0} max={FUND_TARGET_USD} tone={value != null && value > cap ? "warning" : undefined} label="Lane funding toward the first mint" />
-      {value != null && value > cap && <p className="text-xs text-ink-2">Above the ${cap} deploy cap: the agent will place at most ${cap} per rerange.</p>}
+      <div className="space-y-2">
+        <Meter value={value ?? 0} max={FUND_TARGET_USD} tone={value != null && value > cap ? "warning" : undefined} label="Lane funding toward the first mint" />
+        <div className="flex justify-between font-mono text-[0.72rem] tabular text-paper-mute" aria-hidden>
+          <span>$0</span>
+          <span>${FUND_TARGET_USD} first mint</span>
+        </div>
+      </div>
+      {value != null && value > cap && <p className="text-[0.82rem] text-paper-dim">Above the ${cap} deploy cap: the agent will place at most ${cap} per rerange.</p>}
       <div className="flex flex-wrap gap-2">
         <Btn kind={funded ? "primary" : "ghost"} onClick={onDone}>
           {funded ? "Continue" : "Skip for now"}
@@ -957,6 +1078,7 @@ function RegisterStep({
   onDelegationLost: () => void;
 }) {
   const action = useAction();
+  const { stamp } = useDeskStamp();
   const [registered, setRegistered] = useState(false);
   if (!lane) return null;
   const register = () =>
@@ -970,16 +1092,18 @@ function RegisterStep({
       if (!r.ok && r.status !== 409) throw new Error(`desk-agent: ${r.error}`);
       setRegistered(true);
       done(r.ok ? "Registered" : "Already registered");
+      stamp({ kind: "recorded", title: r.ok ? "Desk registered with desk-agent" : "Desk already registered", detail: `Lane ${short(lane)} · ownership and Operator checked on-chain`, serial: lane, href: addressUrl(lane) });
     });
   return (
-    <div className="space-y-3">
-      <p className="text-sm text-ink-2">desk-agent checks on-chain that the lane exists, that you own it and that the Operator is the wallet you delegated. Then choose how much it may do.</p>
+    <div className="space-y-5">
+      <p className={P}>desk-agent checks on-chain that the lane exists, that you own it and that the Operator is the wallet you delegated. Then choose how much it may do.</p>
       {!registered ? (
         <Btn kind="primary" disabled={action.busy} onClick={register}>
           Register desk
         </Btn>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-5">
+          <Label as="p">How much the agent may do</Label>
           <ModePicker lane={lane} current="advisory" vault={session.vault} jwt={session.jwt} />
           <Btn kind="primary" onClick={onRegistered}>
             Finish

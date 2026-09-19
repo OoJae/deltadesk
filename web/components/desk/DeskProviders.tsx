@@ -8,7 +8,8 @@ import type { ReactNode } from "react";
 import { DYNAMIC_ENV_ID } from "@/lib/desk/config";
 
 const DynamicShell = dynamic(() => import("./DynamicShell"), {
-  loading: () => <p className="mx-auto w-full max-w-5xl px-4 py-10 text-sm text-muted">Loading the desk…</p>,
+  // Full height: on a client-side visit the page arrives with the SDK chunk, so a short shell would let the footer jump.
+  loading: () => <p className="label mx-auto min-h-svh w-full max-w-[90rem] px-4 py-16 text-paper-mute md:px-8">Loading the desk…</p>,
 });
 
 export default function DeskProviders({ children }: { children: ReactNode }) {

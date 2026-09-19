@@ -24,7 +24,7 @@ question for AMMs taking over equities market making. DeltaDesk measures the ans
 
 | What | Where |
 |---|---|
-| Web app: Study, Live desk, Tearsheet, League | https://web-production-10951.up.railway.app ([/live](https://web-production-10951.up.railway.app/live), [/tearsheet](https://web-production-10951.up.railway.app/tearsheet), [/league](https://web-production-10951.up.railway.app/league)) |
+| Web app: landing, Truth Study, Live desk, Tearsheet, League | https://web-production-10951.up.railway.app ([/study](https://web-production-10951.up.railway.app/study), [/live](https://web-production-10951.up.railway.app/live), [/tearsheet](https://web-production-10951.up.railway.app/tearsheet), [/league](https://web-production-10951.up.railway.app/league)) |
 | API | https://core-production-512e.up.railway.app ([/health](https://core-production-512e.up.railway.app/health), [/fair-value/NVDA](https://core-production-512e.up.railway.app/fair-value/NVDA), [/study](https://core-production-512e.up.railway.app/study)) |
 | Paid endpoints (x402 on Bankr, USDC on Base) | `https://x402.bankr.bot/0xd8d5b9389721258bcdfa7ac1306af6330e5634cd/<service>`: `safe-to-lp`, `fair-value`, `pool-toxicity`, `tearsheet`, `lp-league` |
 | First settled x402 call (a self-test from our own Bankr wallet) | `safe-to-lp?pool=NVDA`, $0.005 USDC, settled on Base in [`0x309ddc0c…6708`](https://basescan.org/tx/0x309ddc0cbc51eccddf649fa001a25ecdc049179e402bc6dad91e798c8c8e6708) (2026-09-19 06:20 UTC). Payer and payee are both DeltaDesk's wallet `0xd8d5…34cd`: it proves the x402 path settles end to end, not outside demand |

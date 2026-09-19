@@ -17,7 +17,7 @@ Rules the build enforces:
 |---|---|---|---|---|
 | 00 | 0:00–0:03 | Title card | HTML card | card |
 | 01 | 0:03–0:18 | Cold open: Igor's $80 vs $50, Hayden's question (paraphrased) | HTML quote card | card |
-| 02 | 0:18–0:53 | Truth Study: headline, hour-of-week heatmap, Flow X-ray | web `/` | LIVE |
+| 02 | 0:18–0:53 | Truth Study: headline, hour-of-week heatmap, Flow X-ray | web `/study` | LIVE |
 | 03 | 0:53–1:14 | LP League → Tearsheet of the #1 LP wallet | web `/league`, `/tearsheet` | LIVE |
 | 04 | 1:14–1:32 | Same tearsheet via x402 (`lp-truth`), then the first settled x402 call: a $0.005 `safe-to-lp` self-test | x402 endpoint, Base Blockscout | LIVE |
 | 05 | 1:32–1:44 | It's Saturday: Live desk, Chainlink frozen | web `/live` | LIVE |
@@ -64,7 +64,7 @@ Rules the build enforces:
 |---|---|
 | Time | 0:18–0:53 (35 s) |
 | Mode | LIVE |
-| Surface | Web app, Study: `https://web-production-10951.up.railway.app/` (headline card → regime bars → hour-of-week heatmap, hover Mon 09:00 → Flow X-ray) |
+| Surface | Web app, Study: `https://web-production-10951.up.railway.app/study` (page title → headline account → hour-of-week heatmap, hover Mon 09:00 → Flow X-ray) |
 | Requires | – |
 
 **Narration**

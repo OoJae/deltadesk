@@ -45,7 +45,7 @@ Study finding: in NVDA/USDG, LPs earned $362.9k in fees and informed flow took b
 
 ```json
 [
-  { "name": "Truth Study", "description": "Pool x regime x hour-of-week fees vs value picked off by informed flow, and who takes it (Flow X-ray).", "url": "https://web-production-10951.up.railway.app" },
+  { "name": "Truth Study", "description": "Pool x regime x hour-of-week fees vs value picked off by informed flow, and who takes it (Flow X-ray).", "url": "https://web-production-10951.up.railway.app/study" },
   { "name": "Tearsheet", "description": "Any wallet's LP positions: fees, AERO, informed flow, IL, gas, net, per $1k, reconciled. x402, $0.05.", "url": "https://web-production-10951.up.railway.app/tearsheet" },
   { "name": "Safe to LP?", "description": "ALLOW / CAUTION / BLOCK before adding liquidity to NVDA, SPY, TSLA or QQQ/SPY on Robinhood Chain. x402, $0.005.", "url": "https://x402.bankr.bot/0xd8d5b9389721258bcdfa7ac1306af6330e5634cd/safe-to-lp?pool=NVDA" },
   { "name": "LP League", "description": "1,003 LP managers ranked by result vs holding per $1k per day. x402, $0.02.", "url": "https://web-production-10951.up.railway.app/league" },

@@ -30,7 +30,7 @@ NVDA/USDG: LPs earned $362.9k in fees. Informed flow took back $289.5k.
 Meet DeltaDesk 🧵
 ```
 
-Media: Study page screenshot: the hour-of-week heatmap (fees vs picked off), https://web-production-10951.up.railway.app
+Media: Study page screenshot: the hour-of-week heatmap (fees vs picked off), https://web-production-10951.up.railway.app/study
 
 ## 2/9 (259 characters as drafted)
 

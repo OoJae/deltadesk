@@ -1,13 +1,16 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { encodeFunctionData, parseEventLogs, type Address, type Log } from "viem";
 import { deskLaneAbi } from "@/lib/desk/abi/DeskLane";
-import { LANE_A } from "@/lib/desk/chain";
-import { fmtUnits, isZeroAddr } from "@/lib/desk/format";
+import { Label } from "@/components/brand/Label";
+import { LANE_A, addressUrl, txUrl } from "@/lib/desk/chain";
+import { fmtUnits, isZeroAddr, short } from "@/lib/desk/format";
 import { ownerMeta } from "@/lib/desk/meta";
 import type { LaneState } from "@/lib/desk/reads";
 import { sendFromWallet, type EthereumWallet, type SentTx } from "@/lib/desk/tx";
 import { useAction } from "./hooks";
+import { useDeskStamp, type StampKind } from "./stamp";
 import { Btn, Card, ConfirmButton, Status, TxLine } from "./ui";
 
 export type OwnerSigner = {
@@ -44,17 +47,26 @@ export function exitAllNote(logs: readonly Log[], lane: Address, slots: readonly
  */
 export default function OwnerControls({ s, signer, onDone }: { s: LaneState; signer: OwnerSigner; onDone: () => void }) {
   const action = useAction();
+  const { stamp } = useDeskStamp();
   const vault = signer.vault;
   const disabled = !vault || action.busy;
   const hasPositions = s.positions.length > 0 || s.slots.some((x) => x > BigInt(0));
   const operatorLive = !isZeroAddr(s.operator);
 
-  const send = (note: string, doneNote: string | ((r: SentTx) => string), data: () => Promise<`0x${string}`> | `0x${string}`) =>
+  /** Sends one Vault transaction; once it confirms, the inline line records it and an engraved stamp confirms it. */
+  const send = (
+    note: string,
+    doneNote: string | ((r: SentTx) => string),
+    data: () => Promise<`0x${string}`> | `0x${string}`,
+    confirmed: { title: string; kind?: StampKind },
+  ) =>
     action.run(note, async (onHash, done) => {
       if (!vault) throw new Error("Sign in with this lane's Vault first.");
       const r = await sendFromWallet(vault, s.lane, await data(), onHash);
       onDone();
-      done(typeof doneNote === "string" ? doneNote : doneNote(r));
+      const text = typeof doneNote === "string" ? doneNote : doneNote(r);
+      done(text);
+      stamp({ kind: confirmed.kind ?? "recorded", title: confirmed.title, detail: text.length > 90 ? "Some positions stayed in their slots: see the owner controls" : text, serial: r.hash, href: txUrl(r.hash) });
       return r;
     });
 
@@ -75,12 +87,13 @@ export default function OwnerControls({ s, signer, onDone }: { s: LaneState; sig
       }
       onDone();
       done(notes.join(" · ") || "Nothing to revoke");
+      if (notes.length) stamp({ kind: "revoked", title: "Agent revoked", detail: notes.join(" · "), serial: s.lane, href: addressUrl(s.lane) });
     });
 
   return (
-    <Card title="Owner controls" aside={<span className="text-xs text-muted">signed by your Vault · no agent needed</span>}>
+    <Card title="Owner controls" label="Signed by your Vault · no agent needed" bodyClassName="space-y-6">
       {signer.blocked && (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-2 p-3 text-sm">
+        <div className="space-y-3 border border-rule bg-vault px-3.5 py-3">
           <Status tone="warning">{signer.blocked}</Status>
           {signer.signIn && (
             <Btn kind="primary" onClick={signer.signIn}>
@@ -90,15 +103,15 @@ export default function OwnerControls({ s, signer, onDone }: { s: LaneState; sig
         </div>
       )}
 
-      <div className="grid gap-2">
+      <Group label="Stop new risk">
         {s.paused ? (
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--ring)] p-3">
+          <div className="space-y-3 border border-[var(--critical)] bg-vault px-3.5 py-3">
             <Status tone="critical">Lane paused: nothing can add risk</Status>
             <ConfirmButton
               label="Unpause"
               confirm="Unpausing lets the Operator add liquidity again, within the caps."
               disabled={disabled}
-              onConfirm={() => send("Unpausing…", "Unpaused", () => encodeFunctionData({ abi: deskLaneAbi, functionName: "unpause" }))}
+              onConfirm={() => send("Unpausing…", "Unpaused", () => encodeFunctionData({ abi: deskLaneAbi, functionName: "unpause" }), { title: "Lane unpaused" })}
             />
           </div>
         ) : (
@@ -107,10 +120,12 @@ export default function OwnerControls({ s, signer, onDone }: { s: LaneState; sig
             kind="danger"
             confirm="Pausing blocks every risk-adding action immediately. Exits and withdrawals still work."
             disabled={disabled}
-            onConfirm={() => send("Pausing…", "Paused", () => encodeFunctionData({ abi: deskLaneAbi, functionName: "pause" }))}
+            onConfirm={() => send("Pausing…", "Paused", () => encodeFunctionData({ abi: deskLaneAbi, functionName: "pause" }), { title: "Lane paused" })}
           />
         )}
+      </Group>
 
+      <Group label="Unwind and withdraw">
         <ConfirmButton
           label="Exit all"
           kind="danger"
@@ -121,6 +136,7 @@ export default function OwnerControls({ s, signer, onDone }: { s: LaneState; sig
               "Exiting all positions…",
               (r) => exitAllNote(r.receipt.logs, s.lane, s.slots),
               async () => encodeFunctionData({ abi: deskLaneAbi, functionName: "exitAll", args: [await ownerMeta("exitAll", s.caps?.maxDeadlineAhead ?? 120)] }),
+              { title: "Exit confirmed" },
             )
           }
         />
@@ -129,7 +145,9 @@ export default function OwnerControls({ s, signer, onDone }: { s: LaneState; sig
           label="Withdraw all to Vault"
           confirm={`Sends ${fmtUnits(s.bal0, LANE_A.dec0, 2)} ${LANE_A.sym0} and ${fmtUnits(s.bal1, LANE_A.dec1, 6)} ${LANE_A.sym1} to your Vault.${hasPositions ? " Open positions stay in the lane: exit all first to include them." : ""}`}
           disabled={disabled}
-          onConfirm={() => send("Withdrawing to the Vault…", "Withdrawn to the Vault", () => encodeFunctionData({ abi: deskLaneAbi, functionName: "withdrawAll" }))}
+          onConfirm={() =>
+            send("Withdrawing to the Vault…", "Withdrawn to the Vault", () => encodeFunctionData({ abi: deskLaneAbi, functionName: "withdrawAll" }), { title: "Withdrawal confirmed" })
+          }
         />
 
         <div className="grid grid-cols-2 gap-2">
@@ -142,12 +160,21 @@ export default function OwnerControls({ s, signer, onDone }: { s: LaneState; sig
                 label={empty ? `Slot ${slot} empty` : `Withdraw NFT #${id.toString()}`}
                 confirm={`Transfers position NFT #${id.toString()} (slot ${slot}) to your Vault. The escape hatch that works even if a token is paused.`}
                 disabled={disabled || empty}
-                onConfirm={() => send(`Withdrawing position NFT #${id.toString()}…`, `NFT #${id.toString()} sent to the Vault`, () => encodeFunctionData({ abi: deskLaneAbi, functionName: "withdrawPosition", args: [slot] }))}
+                onConfirm={() =>
+                  send(
+                    `Withdrawing position NFT #${id.toString()}…`,
+                    `NFT #${id.toString()} sent to the Vault`,
+                    () => encodeFunctionData({ abi: deskLaneAbi, functionName: "withdrawPosition", args: [slot] }),
+                    { title: `NFT #${id.toString()} withdrawn` },
+                  )
+                }
               />
             );
           })}
         </div>
+      </Group>
 
+      <Group label="Cut the agent off">
         <ConfirmButton
           label="Revoke agent"
           kind="danger"
@@ -155,9 +182,24 @@ export default function OwnerControls({ s, signer, onDone }: { s: LaneState; sig
           disabled={disabled || (!operatorLive && !signer.operatorDelegated)}
           onConfirm={revoke}
         />
-      </div>
+        {operatorLive && (
+          <p className="text-[0.78rem] leading-snug text-paper-mute">
+            Operator <span className="font-mono">{short(s.operator)}</span>
+          </p>
+        )}
+      </Group>
 
       <TxLine state={action.state} />
     </Card>
+  );
+}
+
+/** A group of owner controls under a mono label; destructive ones carry the void hatch (see ui.tsx). */
+function Group({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="space-y-2.5">
+      <Label as="p">{label}</Label>
+      <div className="grid gap-2">{children}</div>
+    </div>
   );
 }

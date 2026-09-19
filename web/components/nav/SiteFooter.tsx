@@ -58,7 +58,7 @@ function FooterList({ title, links }: { title: string; links: { href: string; la
       <ul className="space-y-2.5">
         {links.map((l) => (
           <li key={l.href}>
-            <Link href={l.href} prefetch={l.prefetch} className="text-[0.95rem] text-paper-dim transition-colors hover:text-paper">
+            <Link href={l.href} prefetch={l.prefetch} className="text-[0.95rem] text-paper-dim hover:text-paper">
               {l.label}
             </Link>
           </li>

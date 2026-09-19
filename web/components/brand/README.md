@@ -16,13 +16,18 @@ import { PageHeader } from "@/components/brand/PageHeader";
 ## Rules that are not optional
 
 1. **One accent, rationed.** `serial` (#E4472B) marks the certificate serial (N°), fair value, the gap, the one
-   primary action per view, and focus. Never decoration, links, or "negative" numbers.
+   primary action per view, and focus. Never decoration, links, or "negative" numbers. The page owns its primary:
+   persistent chrome (the nav's "Start a desk") is a ghost button with a serial `→`, so it never adds a second red
+   block to a view.
 2. **Bodoni Moda only for hero and section titles** (`font-display`, via `PageHeader`). Never for UI, labels or data.
    Italic marks the one word that matters.
 3. **Every number is IBM Plex Mono, tabular** (`font-mono tabular`, or the `num` class, or `Stat`).
 4. **"N°" only where the sequence is true**: the weekend's five acts in time order, and the chain id 4663.
-5. **Motion animates transform and opacity only.** Reduced motion is handled globally (everything instant);
-   JS-driven motion must also check `prefersReducedMotion()` from `tokens.ts`.
+5. **Motion animates transform and opacity only.** Enforced in `globals.css`: Tailwind's `transition`,
+   `transition-all`, `transition-colors` and `transition-shadow` are narrowed to transform + opacity, so colour
+   hovers are instant and focus rings land solid serial. To fade a hairline or tint, fade a pseudo-element's opacity
+   (see `.dd-btn--ghost::before`). Reduced motion is handled globally (everything instant); JS-driven motion must also
+   check `prefersReducedMotion()` from `tokens.ts`.
 6. **Copy**: sentence case, specific, from the reader's side, real numbers with their source. No hype, no yield or
    profit claims. The disclaimer is "Informational analytics, not investment advice".
 7. Square corners, hairlines (`border-rule`), no shadows except the stamp toast, no gradients, no glow, no glass.
@@ -39,13 +44,19 @@ import { PageHeader } from "@/components/brand/PageHeader";
 | paper-dim (secondary) | `text-paper-dim` | #A7A293 | 7.65:1 on vault |
 | paper-mute (captions) | `text-paper-mute` | #8F8A7C | 5.67:1 on vault, 4.75:1 on vault-3 |
 | rule (hairline, 14%) | `border-rule`, `bg-rule` | rgba(237,230,214,.14) | |
-| rule-strong (28%) | `border-rule-strong` | rgba(237,230,214,.28) | |
+| rule-strong (28%) | `border-rule-strong` | rgba(237,230,214,.28) | 2.19:1 on vault: decorative only |
+| field (form-control border) | `border-field` | = paper-mute; paper-dim on hover/focus | 5.67:1 on vault, 4.75:1 on vault-3 |
 | serial (accent) | `text-serial`, `bg-serial` | #E4472B | 4.87:1 on vault |
 | serial-ink (text on serial) | `text-serial-ink` | #0A0D0C | 4.87:1 (paper on serial is 3.23: never) |
 
 Legacy names still work and are remapped onto the brand: `--page`, `--surface-1/2`, `--text-primary/secondary/muted`,
 `--grid`, `--axis`, `--ring`, `--accent` (= serial), `bg-page`, `bg-surface-1/2`, `text-ink`, `text-ink-2`,
 `text-muted`, `border-grid`. `.card` is restyled as a square hairline panel; prefer `LedgerPanel` in new code.
+
+**Text fields** need a border of at least 3:1 (WCAG 1.4.11): at rest it is the only cue the field exists. Use
+`border border-field`. Hairline roles fail that, so inside a text `input`, `textarea` or `select` the `--rule` and
+`--rule-strong` roles resolve to the field border (paper-mute at rest, paper-dim on hover and focus): an existing
+`border-rule-strong` input already renders correctly.
 
 **Charts** (validated with the dataviz validator, dark mode, on vault and vault-2, all pairs):
 `--series-1` #3987E5 (blue), `--series-2` #199E70 (aqua), `--series-3` #C98500 (yellow). The reference orange was
@@ -63,7 +74,8 @@ Never put `series-3` and a serial mark in the same chart. Diverging: `--div-pos-
 
 **Engraving utilities** (static tiles): `security-border` (16px border-image frame), `guilloche-rule` (12px woven
 rule), `hatch` (45° tint). Tables: `.ledger-table` (hairline rows, mono header labels; add `className="n"` to
-right-align numeric `td`/`th`). `.ledger-ruled` puts a hairline between direct children.
+right-align numeric `td`/`th`). The 28% rule closes `thead` only; a row header (`<th scope="row">`) sits on the
+row's 14% rule and takes its hover wash. `.ledger-ruled` puts a hairline between direct children.
 
 **Layout**: `CONTAINER` / `<Container>` = `mx-auto w-full max-w-[90rem] px-4 md:px-8` (nav and footer use it).
 
@@ -107,7 +119,8 @@ default true; false for edge-to-edge `.ledger-table`), `className`, `bodyClassNa
 <Button href="/desk" prefetch={false}>Start a desk</Button>      // /desk: always prefetch={false}
 <Button href="https://explorer…" variant="link" trailing="↗">View tx</Button>  // external <a target=_blank>
 ```
-`variant`: "primary" (serial fill, vault ink; one per view) | "ghost" (hairline) | "link" (underlined).
+`variant`: "primary" (serial fill, vault ink; one per view, owned by the page) | "ghost" (hairline; hover fades a
+brighter hairline in) | "link" (underlined).
 `size`: "sm" 36px | "md" 44px | "lg" 56px. `trailing`: glyph after the label. Press = scale .97 + guilloché
 sheen (0.3s); focus = 2px serial ring. All native button/anchor props pass through (`onClick`, `disabled`, `type`…).
 `buttonClass(variant, size, className)` returns the class string for custom elements (e.g. a `<label>`).
@@ -167,12 +180,14 @@ Line-mask reveal (gsap SplitText, loaded on demand), once, when the element near
 
 ### `SmoothScroll` (client)
 `<SmoothScroll />` or `<SmoothScroll scrollTrigger />` (Lenis driven by gsap's ticker + ScrollTrigger.update).
-**Only on `/` and `/brand`.** Off under reduced motion; destroyed on navigation. Add `data-lenis-prevent` to
-scrollable overlays.
+**Only on `/` and `/brand`.** Off under reduced motion. Clicking a link to another path halts the glide
+(`stopInertiaOnNavigate`), and Lenis is torn down in a layout-effect cleanup, before Next scrolls the new page to the
+top, so the next page always opens at the top. Add `data-lenis-prevent` to scrollable overlays.
 
 ### Nav, footer, transitions (`components/nav/`, mounted by `app/layout.tsx`)
 - `SiteNav`: compact seal + wordmark, links (`links.ts`: Study, Live desk, Tearsheet, League, Console, Brand) and the
-  "Start a desk" CTA. Below `lg` a full-screen certificate sheet (focus trap, Esc, focus return).
+  "Start a desk" CTA, a ghost button with a serial `→` so each page's own primary stays the only red block. Below
+  `lg` a full-screen certificate sheet (focus trap, Esc, focus return), where "Start a desk" is the one primary.
 - `SiteFooter`: seal, thesis, map, data sources, the disclaimer, N° 4663.
 - `RouteTransition` (via `app/template.tsx`): React `<ViewTransition>` with `enter="page-enter" exit="page-exit"`.
   The outgoing page lifts and fades (0.6s), the incoming rises (0.8s); the nav is anchored (`site-nav`), the nav seal

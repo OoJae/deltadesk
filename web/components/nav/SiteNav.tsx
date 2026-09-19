@@ -16,8 +16,10 @@ function useIsActive() {
 }
 
 /**
- * Site header: compact seal + wordmark, primary links, the one CTA. Below lg the links fold into a full-screen
- * certificate sheet (focus trapped, Esc closes, focus returns to the toggle).
+ * Site header: compact seal + wordmark, primary links and the persistent "Start a desk" CTA. The CTA is a ghost
+ * button with a serial glyph, so each page's own primary stays the only red block in view (one action per view).
+ * Below lg the links fold into a full-screen certificate sheet (focus trapped, Esc closes, focus returns to the
+ * toggle); inside that sheet "Start a desk" is the one action, so it is primary there.
  * The header is the fixed reference during page transitions (view-transition-name: site-nav) and the seal stamps
  * each new page (site-seal); see globals.css.
  */
@@ -47,7 +49,7 @@ export function SiteNav() {
                 <Link
                   href={l.href}
                   aria-current={isActive(l.href) ? "page" : undefined}
-                  className="relative block px-3 py-2 text-[0.9rem] text-paper-dim transition-colors duration-200 after:absolute after:inset-x-3 after:bottom-1 after:h-px after:origin-left after:scale-x-0 after:bg-current after:transition-transform after:duration-300 after:ease-out hover:text-paper hover:after:scale-x-100 aria-[current=page]:text-paper aria-[current=page]:after:scale-x-100"
+                  className="relative block px-3 py-2 text-[0.9rem] text-paper-dim after:absolute after:inset-x-3 after:bottom-1 after:h-px after:origin-left after:scale-x-0 after:bg-current after:transition-transform after:duration-300 after:ease-out hover:text-paper hover:after:scale-x-100 aria-[current=page]:text-paper aria-[current=page]:after:scale-x-100"
                 >
                   {l.label}
                 </Link>
@@ -57,7 +59,14 @@ export function SiteNav() {
         </nav>
 
         <div className="ml-auto flex items-center gap-2 lg:ml-3">
-          <Button href={DESK_LINK.href} prefetch={false} size="sm" trailing="→" className="hidden sm:inline-flex">
+          <Button
+            href={DESK_LINK.href}
+            prefetch={false}
+            variant="ghost"
+            size="sm"
+            trailing={<span className="text-serial">→</span>}
+            className="hidden sm:inline-flex"
+          >
             {DESK_LINK.label}
           </Button>
           <button

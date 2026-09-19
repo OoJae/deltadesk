@@ -3,7 +3,7 @@
 // emits CollectFailed. The lane page's last-resort copy and the owner controls' exit note must say so.
 import { encodeAbiParameters, encodeEventTopics, zeroAddress, type Address, type Hash, type Hex, type TransactionReceipt } from "viem";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { LaneBody } from "@/components/desk/LaneDesk";
+import LaneDesk, { LaneBody } from "@/components/desk/LaneDesk";
 import OwnerControls from "@/components/desk/OwnerControls";
 import { deskLaneAbi } from "@/lib/desk/abi/DeskLane";
 import { DEFAULT_CAPS } from "@/lib/desk/caps";
@@ -12,8 +12,13 @@ import type { LaneState } from "@/lib/desk/reads";
 import type { EthereumWallet } from "@/lib/desk/tx";
 import { advance, mount, type Mounted } from "./dom";
 
-const h = vi.hoisted(() => ({ logs: [] as unknown[] }));
+const h = vi.hoisted(() => ({ logs: [] as unknown[], readLane: vi.fn() }));
 
+vi.mock("@/lib/desk/reads", async (orig) => ({
+  ...(await orig<typeof import("@/lib/desk/reads")>()),
+  readLane: h.readLane,
+  readEthBalances: vi.fn(async (a: readonly unknown[]) => a.map(() => BigInt(0))),
+}));
 vi.mock("@/lib/desk/api", () => ({ deskApi: vi.fn(async () => ({ ok: false, status: 404, error: "not found" })) }));
 vi.mock("@/lib/desk/meta", async (orig) => ({
   ...(await orig<typeof import("@/lib/desk/meta")>()),
@@ -73,6 +78,33 @@ afterEach(() => {
   ui?.unmount();
   ui = null;
   vi.useRealTimers();
+});
+
+describe("lane page before the first chain read", () => {
+  // The loading state is the certificate frame, not a one-line shell: a short shell let the footer into the first
+  // viewport and it jumped when the read landed (CLS 0.32). A failed read keeps the frame and retries.
+  it("holds the certificate with the lane address, keeps it through a failed read, then fills it in", async () => {
+    let fail: (e: Error) => void = () => {};
+    h.readLane.mockImplementationOnce(() => new Promise((_, reject) => (fail = reject)));
+    h.readLane.mockResolvedValue(LANE_STATE);
+    ui = await mount(<LaneDesk lane={LANE} />);
+    const frame = () => ui!.el.querySelector("section[aria-label=Lane]");
+    const status = () => ui!.el.querySelector("[role=status]")?.textContent;
+
+    expect(frame()?.getAttribute("aria-busy")).toBe("true");
+    expect(frame()?.textContent).toContain(LANE);
+    expect(status()).toContain("Reading the lane from Robinhood Chain…");
+
+    fail(new Error("HTTP request failed"));
+    await advance(0);
+    expect(frame()?.getAttribute("aria-busy")).toBe("false");
+    expect(status()).toContain("Chain read failed");
+    expect(ui.text()).toContain("Trying again every 5 s. Last error: HTTP request failed");
+
+    await advance(5000);
+    expect(frame()).toBeNull();
+    expect(ui.el.querySelector("section[aria-label='Lane A']")?.textContent).toContain("Lane value");
+  });
 });
 
 describe("If DeltaDesk is down", () => {

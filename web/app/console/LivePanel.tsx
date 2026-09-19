@@ -1,25 +1,33 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Label } from "@/components/brand/Label";
+import { LINK, ScrollX, StatusIcon, StatusStamp, type StatusTone } from "@/components/ledger/ui";
 import { REGIME_LABEL, bps } from "@/lib/format";
 import { addressLink, ago, etTime, short, txLink } from "@/lib/console/format";
 import { liveView, nextLiveState } from "@/lib/console/live";
 import type { FeedResult, PublicDecision, PublicLane, PublicSignal } from "@/lib/console/types";
 
-const RISK = {
-  normal: { color: "var(--good)", icon: "✓", label: "Risk-adding allowed" },
-  reduce_only: { color: "var(--warning)", icon: "!", label: "Reduce-only" },
-  flat: { color: "var(--critical)", icon: "✕", label: "Flat (exit)" },
-} as const;
-
-const STATUS_TONE: Record<string, string> = {
-  executed: "var(--good)", confirmed: "var(--good)",
-  executing: "var(--warning)", sent: "var(--warning)", pending: "var(--warning)", observed: "var(--warning)",
-  failed: "var(--critical)", blocked: "var(--critical)", policy_denied: "var(--critical)", critic_rejected: "var(--critical)",
+const RISK: Record<string, { tone: StatusTone; label: string }> = {
+  normal: { tone: "good", label: "Risk-adding allowed" },
+  reduce_only: { tone: "warning", label: "Reduce-only" },
+  flat: { tone: "critical", label: "Flat (exit)" },
 };
 
-function Dot({ tone }: { tone?: string }) {
-  return <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: tone ?? "var(--axis)" }} aria-hidden />;
+const STATUS_TONE: Record<string, StatusTone> = {
+  executed: "good", confirmed: "good",
+  executing: "warning", sent: "warning", pending: "warning", observed: "warning",
+  failed: "critical", blocked: "critical", policy_denied: "critical", critic_rejected: "critical",
+};
+
+/** A decision or signal status: reserved status glyph plus the status word. */
+function Status({ status }: { status: string }) {
+  return (
+    <span className="inline-flex items-center gap-2 whitespace-nowrap">
+      <StatusIcon tone={STATUS_TONE[status] ?? "neutral"} size="sm" />
+      {status.replace("_", " ")}
+    </span>
+  );
 }
 
 export default function LivePanel({ initial }: { initial: FeedResult }) {
@@ -49,9 +57,14 @@ export default function LivePanel({ initial }: { initial: FeedResult }) {
       ? res.reason === "not_configured" ? "This deployment is not connected to a desk agent yet." : `The desk agent is not reachable right now (${res.error}).`
       : "The agent is up, but no lane is registered yet.";
     return (
-      <div className="card space-y-2 p-5 text-sm">
-        <div className="flex items-center gap-2 font-semibold"><span className="h-2 w-2 rounded-full bg-[var(--axis)]" aria-hidden />Desk not yet live</div>
-        <p className="text-ink-2">{why} The replays below run the same regime machine and gates over historical weekends.</p>
+      <div className="space-y-4">
+        <div className="border border-rule bg-vault-2 px-5 py-5 md:px-7">
+          <p className="flex items-center gap-3 text-[1.05rem] font-medium text-paper">
+            <StatusIcon tone="neutral" />
+            Desk not yet live
+          </p>
+          <p className="mt-2 max-w-[70ch] text-sm leading-relaxed text-paper-dim">{why} The replays below run the same regime machine and gates over historical weekends.</p>
+        </div>
         {res.ok && <Health feed={res.feed} now={now} />}
       </div>
     );
@@ -59,18 +72,23 @@ export default function LivePanel({ initial }: { initial: FeedResult }) {
 
   const f = view.feed;
   return (
-    <div className="space-y-4">
+    <div className="space-y-8">
       {view.stale && (
-        <div role="status" className="card flex items-start gap-2 p-3 text-sm">
-          <Dot tone="var(--warning)" />
+        <div role="status" className="flex items-start gap-3 border border-rule-strong bg-vault-2 px-5 py-4 text-sm text-paper-dim">
+          <StatusIcon tone="warning" className="mt-px" />
           <span>
-            <strong>Desk agent not reachable right now</strong> ({view.stale.error}). Showing its last live answer, {ago(Math.max(0, now - view.stale.lastLiveAtMs))} old; retrying every 10 s.
+            <strong className="font-medium text-paper">Desk agent not reachable right now</strong> ({view.stale.error}). Showing its last live answer,{" "}
+            <span className="font-mono">{ago(Math.max(0, now - view.stale.lastLiveAtMs))}</span> old; retrying every 10 s.
           </span>
         </div>
       )}
       <Health feed={f} now={now} />
-      <div className="grid gap-4 md:grid-cols-2">
-        {f.lanes.map((l) => <LaneCard key={l.lane} lane={l} now={now} />)}
+      {/* One lane reads across the full measure; several sit two to a row on the hairline grid. */}
+      <div className={`grid gap-px border border-rule bg-rule ${f.lanes.length > 1 ? "md:grid-cols-2" : ""}`}>
+        {f.lanes.map((l) => (
+          <LaneCard key={l.lane} lane={l} now={now} wide={f.lanes.length === 1} />
+        ))}
+        {f.lanes.length > 1 && f.lanes.length % 2 === 1 && <div aria-hidden className="hidden bg-vault-2 md:block" />}
       </div>
       <Decisions rows={f.decisions} />
       <Signals rows={f.signals} />
@@ -82,76 +100,145 @@ function Health({ feed, now }: { feed: { agent: { defaultMode: string | null; mo
   const h = feed.agent.health;
   const modes = Object.entries(feed.agent.modes).map(([m, c]) => `${c} ${m}`).join(" · ");
   return (
-    <div className="card flex flex-wrap items-center justify-between gap-3 p-4 text-sm">
-      <div className="flex items-center gap-2">
-        <span className="flex h-5 w-5 items-center justify-center rounded-full text-xs text-black" style={{ background: h.ok ? "var(--good)" : "var(--warning)" }} aria-hidden>{h.ok ? "✓" : "!"}</span>
-        <strong>{h.ok ? "Agent healthy" : "Agent degraded"}</strong>
-        <span className="text-ink-2 tabular">· last tick {h.lastTickAgeMs == null ? "never" : `${ago(h.lastTickAgeMs)} ago`}</span>
+    <div className="grid gap-5 border-y border-rule py-5 md:grid-cols-12 md:items-center md:gap-8">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 md:col-span-5">
+        <StatusIcon tone={h.ok ? "good" : "warning"} />
+        <strong className="font-medium text-paper">{h.ok ? "Agent healthy" : "Agent degraded"}</strong>
+        <span className="font-mono text-[0.78rem] text-paper-dim tabular">· last tick {h.lastTickAgeMs == null ? "never" : `${ago(h.lastTickAgeMs)} ago`}</span>
       </div>
-      <div className="text-ink-2">
-        Mode: <strong className="text-ink">{modes || feed.agent.defaultMode || "–"}</strong>
-        {feed.agent.defaultMode && <span className="text-muted"> (default {feed.agent.defaultMode})</span>}
+      <div className="text-sm text-paper-dim md:col-span-4">
+        <Label className="mr-2">Mode</Label>
+        <strong className="font-medium text-paper">{modes || feed.agent.defaultMode || "–"}</strong>
+        {feed.agent.defaultMode && <span className="text-paper-mute"> (default {feed.agent.defaultMode})</span>}
       </div>
-      <div className="w-full text-xs text-muted tabular">Feed generated {ago(Math.max(0, now - feed.generatedAtMs))} ago · refreshes every 10 s</div>
+      <div className="font-mono text-[0.7rem] text-paper-mute tabular md:col-span-3 md:text-right">
+        Feed generated {ago(Math.max(0, now - feed.generatedAtMs))} ago · refreshes every 10 s
+      </div>
     </div>
   );
 }
 
-function LaneCard({ lane, now }: { lane: PublicLane; now: number }) {
+function LaneCard({ lane, now, wide = false }: { lane: PublicLane; now: number; wide?: boolean }) {
   const r = lane.regime;
-  const risk = r ? RISK[r.riskMode as keyof typeof RISK] : undefined;
+  const risk = r ? RISK[r.riskMode] : undefined;
   return (
-    <div className="card space-y-3 p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="text-xs text-muted">Lane #{lane.laneId} · {lane.pool?.name ?? "pool"}</div>
-          <a className="font-mono text-sm text-[var(--accent)] hover:underline" href={addressLink(lane.lane)} target="_blank" rel="noreferrer">{short(lane.lane, 8, 6)}</a>
-          <div className="text-xs text-ink-2">operator <a className="font-mono hover:underline" href={addressLink(lane.operator)} target="_blank" rel="noreferrer">{short(lane.operator)}</a> · {lane.mode} · {lane.status}</div>
-        </div>
-        {risk && (
-          <div className="flex items-center gap-2 rounded-full border border-[var(--ring)] px-3 py-1 text-xs font-semibold">
-            <span className="flex h-4 w-4 items-center justify-center rounded-full text-[10px] text-black" style={{ background: risk.color }} aria-hidden>{risk.icon}</span>
-            {risk.label}
+    <article className={`grid gap-6 bg-vault-2 px-5 py-6 md:px-7 md:py-7 ${wide ? "lg:grid-cols-3 lg:gap-x-10" : ""}`}>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 space-y-1.5">
+          <Label as="h3" tone="paper">
+            Lane #{lane.laneId} · {lane.pool?.name ?? "pool"}
+          </Label>
+          <a className={`${LINK} block font-mono text-[0.95rem]`} href={addressLink(lane.lane)} target="_blank" rel="noreferrer">
+            {short(lane.lane, 8, 6)}
+          </a>
+          <div className="text-xs text-paper-dim">
+            operator{" "}
+            <a className={`${LINK} font-mono`} href={addressLink(lane.operator)} target="_blank" rel="noreferrer">
+              {short(lane.operator)}
+            </a>{" "}
+            · {lane.mode} · {lane.status}
           </div>
-        )}
+        </div>
+        {risk && <StatusStamp tone={risk.tone}>{risk.label}</StatusStamp>}
       </div>
       {r ? (
         <>
-          <div className="text-sm"><span className="text-muted">Regime · </span><strong>{REGIME_LABEL[r.name] ?? r.name}</strong>{r.reopenKind && <span className="text-ink-2"> ({r.reopenKind.replace("_", " ")} window)</span>}</div>
-          <div className="flex flex-wrap gap-1.5 text-xs">
-            {r.activeGates.length === 0 ? <span className="rounded bg-surface-2 px-2 py-0.5 text-ink-2">no gate active</span> : r.activeGates.map((g) => <span key={g} className="rounded border border-[var(--ring)] px-2 py-0.5 font-medium">{g}</span>)}
+          <div className={`space-y-3 ${wide ? "lg:border-l lg:border-rule lg:pl-10" : ""}`}>
+            <p className="text-[1.05rem] text-paper">
+              <Label className="mr-2 align-middle">Regime</Label>
+              {REGIME_LABEL[r.name] ?? r.name}
+              {r.reopenKind && <span className="text-paper-dim"> ({r.reopenKind.replace("_", " ")} window)</span>}
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {r.activeGates.length === 0 ? (
+                <span className="label border border-rule px-2 py-1 text-paper-mute">no gate active</span>
+              ) : (
+                r.activeGates.map((g) => (
+                  <span key={g} className="label border border-rule-strong px-2 py-1 text-paper">
+                    {g}
+                  </span>
+                ))
+              )}
+            </div>
           </div>
-          <dl className="grid grid-cols-3 gap-2 text-xs">
-            <div><dt className="text-muted">Pool mid</dt><dd className="tabular">{r.poolMid?.toFixed(2) ?? "–"}</dd></div>
-            <div><dt className="text-muted">Fair (HL·k)</dt><dd className="tabular">{r.fair?.toFixed(2) ?? "–"}</dd></div>
-            <div><dt className="text-muted">Gap</dt><dd className="tabular">{bps(r.gapBps)}</dd></div>
+          <div className={`space-y-4 ${wide ? "lg:border-l lg:border-rule lg:pl-10" : ""}`}>
+          <dl className={`grid grid-cols-3 gap-4 border-t border-rule pt-5 ${wide ? "lg:border-t-0 lg:pt-0" : ""}`}>
+            <div className="space-y-1">
+              <Label as="dt">Pool mid</Label>
+              <dd className="font-mono text-sm text-paper tabular">{r.poolMid?.toFixed(2) ?? "–"}</dd>
+            </div>
+            <div className="space-y-1">
+              <Label as="dt">Fair (HL·k)</Label>
+              <dd className="font-mono text-sm text-paper tabular">{r.fair?.toFixed(2) ?? "–"}</dd>
+            </div>
+            <div className="space-y-1">
+              <Label as="dt">Gap</Label>
+              <dd className="font-mono text-sm text-serial tabular">{bps(r.gapBps)}</dd>
+            </div>
           </dl>
-          <div className="text-xs text-muted tabular">tick {ago(Math.max(0, now - r.atMs))} ago</div>
+          <div className="font-mono text-[0.7rem] text-paper-mute tabular">tick {ago(Math.max(0, now - r.atMs))} ago</div>
+          </div>
         </>
-      ) : <p className="text-sm text-ink-2">No tick recorded for this lane yet.</p>}
-    </div>
+      ) : (
+        <p className="text-sm text-paper-dim">No tick recorded for this lane yet.</p>
+      )}
+    </article>
   );
 }
 
 function Decisions({ rows }: { rows: PublicDecision[] }) {
   return (
-    <section className="card overflow-x-auto p-2">
-      <h3 className="px-2 pt-2 text-sm font-semibold">Decision log</h3>
-      {rows.length === 0 ? <p className="p-2 text-sm text-ink-2">No decision yet: the lane only holds (a lone hold writes no decision).</p> : (
-        <table className="w-full min-w-[640px] text-xs">
-          <thead className="text-muted"><tr><th className="p-2 text-left">Time</th><th className="p-2 text-left">Kind</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">Summary</th><th className="p-2 text-left">Tx</th></tr></thead>
-          <tbody>
-            {rows.map((d) => (
-              <tr key={d.id} className="border-t border-grid align-top">
-                <td className="whitespace-nowrap p-2 tabular text-ink-2">{etTime(d.createdAtMs)}</td>
-                <td className="p-2 font-medium">{d.kind}</td>
-                <td className="p-2"><span className="flex gap-1.5"><Dot tone={STATUS_TONE[d.status]} />{d.status.replace("_", " ")}</span></td>
-                <td className="p-2 text-ink-2">{d.summary}<div className="font-mono text-[10px] text-muted" title={d.decisionId}>{short(d.decisionId, 10, 6)}</div></td>
-                <td className="p-2">{d.txHashes.length === 0 ? <span className="text-muted">–</span> : d.txHashes.map((h) => <a key={h} className="block font-mono text-[var(--accent)] hover:underline" href={txLink(h)} target="_blank" rel="noreferrer">{short(h)}</a>)}</td>
+    <section className="border border-rule bg-vault-2" aria-labelledby="decision-log">
+      <header className="border-b border-rule px-5 py-4 md:px-7">
+        <Label as="p">What the desk decided</Label>
+        <h3 id="decision-log" className="mt-1 text-[1.15rem] font-medium text-paper">
+          Decision log
+        </h3>
+      </header>
+      {rows.length === 0 ? (
+        <p className="px-5 py-5 text-sm text-paper-dim md:px-7">No decision yet: the lane only holds (a lone hold writes no decision).</p>
+      ) : (
+        <ScrollX label="Decision log">
+          <table className="ledger-table min-w-[48rem] text-xs">
+            <thead>
+              <tr>
+                <th scope="col" className="pl-5 md:pl-7">Time</th>
+                <th scope="col">Kind</th>
+                <th scope="col">Status</th>
+                <th scope="col">Summary</th>
+                <th scope="col" className="pr-5 md:pr-7">Tx</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.map((d) => (
+                <tr key={d.id} className="align-top">
+                  <td className="whitespace-nowrap pl-5 font-mono text-paper-dim tabular md:pl-7">{etTime(d.createdAtMs)}</td>
+                  <td className="font-mono text-paper">{d.kind}</td>
+                  <td className="text-paper-dim">
+                    <Status status={d.status} />
+                  </td>
+                  <td className="text-paper-dim">
+                    {d.summary}
+                    <div className="mt-1 font-mono text-[0.65rem] text-paper-mute" title={d.decisionId}>
+                      {short(d.decisionId, 10, 6)}
+                    </div>
+                  </td>
+                  <td className="pr-5 md:pr-7">
+                    {d.txHashes.length === 0 ? (
+                      <span className="text-paper-mute">–</span>
+                    ) : (
+                      d.txHashes.map((h) => (
+                        <a key={h} className={`${LINK} block whitespace-nowrap font-mono`} href={txLink(h)} target="_blank" rel="noreferrer">
+                          {short(h)}
+                        </a>
+                      ))
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </ScrollX>
       )}
     </section>
   );
@@ -159,32 +246,76 @@ function Decisions({ rows }: { rows: PublicDecision[] }) {
 
 function Signals({ rows }: { rows: PublicSignal[] }) {
   return (
-    <section className="card overflow-x-auto p-2">
-      <h3 className="px-2 pt-2 text-sm font-semibold">Gate signals</h3>
-      <p className="px-2 text-xs text-muted">Each regime or gate change the desk announces on-chain as a <code>signal(Meta)</code> LaneAction. The preimage is published so anyone can recompute <code>keccak256(preimage) = reasonHash</code>.</p>
-      {rows.length === 0 ? <p className="p-2 text-sm text-ink-2">No gate signal yet.</p> : (
-        <table className="w-full min-w-[640px] text-xs">
-          <thead className="text-muted"><tr><th className="p-2 text-left">Since</th><th className="p-2 text-left">Announced state</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">reasonHash / preimage</th><th className="p-2 text-left">Tx</th></tr></thead>
-          <tbody>
-            {rows.map((s) => (
-              <tr key={s.decisionId} className="border-t border-grid align-top">
-                <td className="whitespace-nowrap p-2 tabular text-ink-2">{etTime(s.atMs)}</td>
-                <td className="p-2"><strong>{REGIME_LABEL[s.regime] ?? s.regime}</strong><div className="text-ink-2">{s.gates.length ? s.gates.join(" + ") : "no gate"}{s.initial && " · initial"}</div></td>
-                <td className="p-2"><span className="flex gap-1.5"><Dot tone={STATUS_TONE[s.status]} />{s.status.replace("_", " ")}</span></td>
-                <td className="p-2">
-                  <div className="font-mono text-[10px]" title={s.reasonHash}>{short(s.reasonHash, 10, 8)}</div>
-                  {s.preimage ? (
-                    <details className="mt-1">
-                      <summary className="cursor-pointer text-ink-2">preimage {s.preimageVerified ? "· hash verified ✓" : "· hash mismatch ✕"}</summary>
-                      <pre className="mt-1 max-w-[28rem] whitespace-pre-wrap break-all rounded bg-surface-2 p-2 font-mono text-[10px]">{s.preimage}</pre>
-                    </details>
-                  ) : <div className="text-muted">{s.preimageWithheld ? "preimage withheld (names a non-public address)" : "no preimage"}</div>}
-                </td>
-                <td className="p-2">{s.txHash ? <a className="font-mono text-[var(--accent)] hover:underline" href={txLink(s.txHash)} target="_blank" rel="noreferrer">{short(s.txHash)}</a> : <span className="text-muted">–</span>}</td>
+    <section className="border border-rule bg-vault-2" aria-labelledby="gate-signals">
+      <header className="space-y-2 border-b border-rule px-5 py-4 md:px-7">
+        <Label as="p">What the desk announced on-chain</Label>
+        <h3 id="gate-signals" className="text-[1.15rem] font-medium text-paper">
+          Gate signals
+        </h3>
+        <p className="max-w-[80ch] text-xs leading-relaxed text-paper-dim">
+          Each regime or gate change the desk announces on-chain as a <code className="font-mono text-paper">signal(Meta)</code> LaneAction. The preimage is
+          published so anyone can recompute <code className="font-mono text-paper">keccak256(preimage) = reasonHash</code>.
+        </p>
+      </header>
+      {rows.length === 0 ? (
+        <p className="px-5 py-5 text-sm text-paper-dim md:px-7">No gate signal yet.</p>
+      ) : (
+        <ScrollX label="Gate signals">
+          <table className="ledger-table min-w-[52rem] text-xs">
+            <thead>
+              <tr>
+                <th scope="col" className="pl-5 md:pl-7">Since</th>
+                <th scope="col">Announced state</th>
+                <th scope="col">Status</th>
+                <th scope="col">reasonHash / preimage</th>
+                <th scope="col" className="pr-5 md:pr-7">Tx</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.map((s) => (
+                <tr key={s.decisionId} className="align-top">
+                  <td className="whitespace-nowrap pl-5 font-mono text-paper-dim tabular md:pl-7">{etTime(s.atMs)}</td>
+                  <td>
+                    <strong className="font-medium text-paper">{REGIME_LABEL[s.regime] ?? s.regime}</strong>
+                    <div className="mt-0.5 font-mono text-paper-dim">
+                      {s.gates.length ? s.gates.join(" + ") : "no gate"}
+                      {s.initial && " · initial"}
+                    </div>
+                  </td>
+                  <td className="text-paper-dim">
+                    <Status status={s.status} />
+                  </td>
+                  <td>
+                    <div className="font-mono text-[0.68rem] text-paper" title={s.reasonHash}>
+                      {short(s.reasonHash, 10, 8)}
+                    </div>
+                    {s.preimage ? (
+                      <details className="group mt-1.5">
+                        <summary className="cursor-pointer text-paper-dim marker:text-paper-mute hover:text-paper">
+                          preimage {s.preimageVerified ? "· hash verified ✓" : "· hash mismatch ✕"}
+                        </summary>
+                        <pre className="mt-2 max-w-[28rem] whitespace-pre-wrap break-all border border-rule bg-vault p-3 font-mono text-[0.65rem] leading-relaxed text-paper-dim">
+                          {s.preimage}
+                        </pre>
+                      </details>
+                    ) : (
+                      <div className="mt-1 text-paper-mute">{s.preimageWithheld ? "preimage withheld (names a non-public address)" : "no preimage"}</div>
+                    )}
+                  </td>
+                  <td className="pr-5 md:pr-7">
+                    {s.txHash ? (
+                      <a className={`${LINK} whitespace-nowrap font-mono`} href={txLink(s.txHash)} target="_blank" rel="noreferrer">
+                        {short(s.txHash)}
+                      </a>
+                    ) : (
+                      <span className="text-paper-mute">–</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </ScrollX>
       )}
     </section>
   );
