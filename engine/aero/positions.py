@@ -50,10 +50,13 @@ def staked_segments(seg: pl.DataFrame, transfers: pl.DataFrame) -> pl.DataFrame:
 def reward_sweep(seg: pl.DataFrame, path: pl.DataFrame, sched: pl.DataFrame, prices: pl.DataFrame, ticks: np.ndarray,
                  t_end: float) -> tuple[np.ndarray, np.ndarray, dict]:
     """AERO (and USD at accrual) earned by every STAKED segment; zeros elsewhere. See module docstring."""
-    st = seg.filter(pl.col("staked"))
-    idx = np.flatnonzero(seg["staked"].to_numpy())
+    # a segment starting after the data end has seen nothing yet; without this its (clipped) end would be snapshot
+    # against an unset start and earn every reward since launch
+    live = seg["staked"].to_numpy() & (seg["start_ts"].cast(pl.Float64).to_numpy() <= t_end)
+    st = seg.filter(pl.Series(live))
+    idx = np.flatnonzero(live)
     s0 = st["start_ts"].cast(pl.Float64).to_numpy()
-    s1 = st["end_ts"].cast(pl.Float64).fill_null(t_end).to_numpy()
+    s1 = np.minimum(st["end_ts"].cast(pl.Float64).fill_null(t_end).to_numpy(), t_end)
     L = st["L"].to_numpy().astype(np.float64)
     a_lo, a_hi = st["a_lo"].to_numpy(), st["a_hi"].to_numpy()
     nb = len(ticks) + 1

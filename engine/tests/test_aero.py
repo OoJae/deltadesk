@@ -87,3 +87,11 @@ def test_reward_schedule_leftover_and_epoch(monkeypatch):
     assert s["rate_aero_s"].to_list() == pytest.approx([r1, r2])
     assert s["end_ts"].to_list() == pytest.approx([t2, 101 * wk])  # the first rate is superseded at t2
     assert AS.epoch_next(t1) == 101 * wk
+
+
+def test_reward_sweep_ignores_segments_after_data_end():
+    # c starts after the data end (an LP event after the last swap): it earns nothing and does not dilute or inflate a
+    seg, ticks = _seg([("a", 0, None, 1, -10, 10, True), ("c", 150, None, 5, -10, 10, True)])
+    aero, _, d = AP.reward_sweep(seg, _path([(0, 0)]), _sched(1.0), _prices(), ticks, 100.0)
+    assert aero == pytest.approx([100.0, 0.0])
+    assert sum(aero) == pytest.approx(d["aero_paid_to_staked"])

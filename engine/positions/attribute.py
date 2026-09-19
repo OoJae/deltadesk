@@ -127,6 +127,22 @@ def load_flash(pool: Pool, pricer: UsdPricer) -> pl.DataFrame | None:
 
 
 # --------------------------------------------------------------------------------------------------------------- sweep
+def two_sum_rows(hi: np.ndarray, lo: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Σ over axis 1 of the double-double columns (hi + lo), as a double-double (S, S_lo): a pairwise TwoSum tree keeps
+    every rounding error, so a range that holds one huge accumulator (a bucket that once had dust liquidity only) does
+    not round away the small growth of its other buckets."""
+    x, err = hi, lo.sum(axis=1)
+    while x.shape[1] > 1:
+        if x.shape[1] % 2:
+            x = np.concatenate([x, np.zeros((x.shape[0], 1))], axis=1)
+        a_, b_ = x[:, 0::2], x[:, 1::2]
+        s_ = a_ + b_
+        bp = s_ - a_
+        err = err + ((a_ - (s_ - bp)) + (b_ - bp)).sum(axis=1)
+        x = s_
+    return (x[:, 0] if x.shape[1] else np.zeros(x.shape[0])), err
+
+
 def sweep(ticks: np.ndarray, ev: pl.DataFrame, sw: pl.DataFrame) -> dict:
     """Run the feeGrowth sweep for one pool.
 
@@ -134,7 +150,11 @@ def sweep(ticks: np.ndarray, ev: pl.DataFrame, sw: pl.DataFrame) -> dict:
     [lower, upper) covers indices [a(lower), a(upper)).
     ev: sweep events sorted by ord with columns ord, a_lo, a_hi, dL_signed (python-int string).
     sw: swaps (+ flash) sorted by ord with METRICS columns, reg, tick_before, tick, sqrtp_before/after, liquidity.
-    Returns snap (K, NR*NM) = Σ_{b in range} A[b] just before each event, A_final, and per-swap diagnostics."""
+    Returns snap (K, NR*NM) = Σ_{b in range} A[b] just before each event, A_final, and per-swap diagnostics.
+
+    A is kept as a double-double (A + A_lo, TwoSum on every update): a bucket that once held only dust liquidity (L ≈ 1)
+    gets a huge per-unit growth, after which ordinary increments (fee / 1e13) fall below float64 resolution of A and
+    would be silently absorbed. snap / snap_lo are the two parts of every snapshot."""
     nb = len(ticks)
     K = ev.height
     ev_ord = ev["ord"].to_numpy()
@@ -202,7 +222,21 @@ def sweep(ticks: np.ndarray, ev: pl.DataFrame, sw: pl.DataFrame) -> dict:
     Lx[:] = 0
     Lf = np.zeros(nb + 1)
     A = np.zeros((NR * NM, nb + 1))
+    A_lo = np.zeros((NR * NM, nb + 1))
     snap = np.zeros((K, NR * NM))
+    snap_lo = np.zeros((K, NR * NM))
+    A_flat, A_lo_flat, ncol = A.reshape(-1), A_lo.reshape(-1), nb + 1
+
+    def add(rows: np.ndarray, cols: np.ndarray, vals: np.ndarray) -> None:
+        """A[rows, cols] += vals (duplicates summed), compensated: what A cannot hold goes to A_lo."""
+        flat = (rows * ncol + cols).ravel()
+        u, inv = np.unique(flat, return_inverse=True)
+        inc = np.bincount(inv, weights=vals.ravel(), minlength=len(u))
+        h = A_flat[u]
+        s_ = h + inc
+        bp = s_ - h
+        A_flat[u] = s_
+        A_lo_flat[u] += (h - (s_ - bp)) + (inc - bp)
     unattributed = np.zeros(NM)
     rows_m = np.arange(NM)
     t0 = time.time()
@@ -218,7 +252,7 @@ def sweep(ticks: np.ndarray, ev: pl.DataFrame, sw: pl.DataFrame) -> dict:
                 unattributed += vals[:, ~ok].sum(axis=1)
             if ok.any():
                 rr = g_reg[g0:g1][ok][None, :] * NM + rows_m[:, None]
-                np.add.at(A, (rr, idx[ok][None, :]), vals[:, ok] / Lb[ok])
+                add(rr, np.broadcast_to(idx[ok][None, :], rr.shape), vals[:, ok] / Lb[ok])
         m0, m1 = m_bounds[k], m_bounds[k + 1]
         if m1 > m0:
             e0, e1 = ent_bounds[m0], ent_bounds[m1]
@@ -235,7 +269,7 @@ def sweep(ticks: np.ndarray, ev: pl.DataFrame, sw: pl.DataFrame) -> dict:
                 share = np.where(good, delta[e0:e1] / np.where(good, norm[loc], 1.0), 0.0)
                 vals = Xm[:, loc] * share[None, :]
                 rr = reg[m_idx[m0:m1]][loc][None, :] * NM + rows_m[:, None]
-                np.add.at(A, (rr, kk[None, :]), vals)
+                add(rr, np.broadcast_to(kk[None, :], rr.shape), vals)
         s0, s1 = sw_bounds[k], sw_bounds[k + 1]
         if s1 > s0:
             L_rec_after[s0:s1] = Lf[a_a[s0:s1]]
@@ -243,17 +277,18 @@ def sweep(ticks: np.ndarray, ev: pl.DataFrame, sw: pl.DataFrame) -> dict:
         if k == K:
             break
         lo, hi = ev_lo[k], ev_hi[k]
-        snap[k] = A[:, lo:hi].sum(axis=1)
+        snap[k], snap_lo[k] = two_sum_rows(A[:, lo:hi], A_lo[:, lo:hi])
         if ev_dl[k]:
             Lx[lo:hi] += ev_dl[k]
             Lf[lo:hi] = Lx[lo:hi].astype(np.float64)
     if (Lx < 0).any():
         raise AssertionError("negative bucket liquidity: reconstruction error")
-    return {"snap": snap, "A": A, "L_rec_after": L_rec_after, "L_rec_before": L_rec_before, "unattributed": unattributed,
+    return {"snap": snap, "snap_lo": snap_lo, "A": A, "A_lo": A_lo, "L_rec_after": L_rec_after, "L_rec_before": L_rec_before, "unattributed": unattributed,
             "n_multi": int(multi.sum()), "n_entries": int(rep.size), "secs": time.time() - t0, "L_final": Lx}
 
 
-def segment_accruals(seg: pl.DataFrame, ev: pl.DataFrame, snap: np.ndarray, A: np.ndarray) -> tuple[pl.DataFrame, np.ndarray]:
+def segment_accruals(seg: pl.DataFrame, ev: pl.DataFrame, snap: np.ndarray, A: np.ndarray,
+                     snap_lo: np.ndarray | None = None, A_lo: np.ndarray | None = None) -> tuple[pl.DataFrame, np.ndarray]:
     """Accrual of every constant-liquidity segment: L · (Σ_{b in range} A[b] at its end − at its start).
 
     seg needs pos_id, start_ord, end_ord (null = open), L, a_lo, a_hi; ev is the sweep-event frame (row k = snap[k]).
@@ -266,14 +301,18 @@ def segment_accruals(seg: pl.DataFrame, ev: pl.DataFrame, snap: np.ndarray, A: n
     assert (seg["k_end"].is_null() == seg["end_ord"].is_null()).all(), "segment end not found among sweep events"
     ks = seg["k_start"].to_numpy()
     ke = seg["k_end"].fill_null(-1).to_numpy()
-    s_start = snap[ks]
-    s_end = np.empty_like(s_start)
+    if snap_lo is None:
+        snap_lo, A_lo = np.zeros_like(snap), np.zeros_like(A)
     has_end = ke >= 0
-    s_end[has_end] = snap[ke[has_end]]
     a_lo_s, a_hi_s = seg["a_lo"].to_numpy(), seg["a_hi"].to_numpy()
+
+    e_hi = np.empty((len(ks), snap.shape[1]))
+    e_lo = np.empty_like(e_hi)
+    e_hi[has_end], e_lo[has_end] = snap[ke[has_end]], snap_lo[ke[has_end]]
     for i in np.flatnonzero(~has_end):  # still open: accrue up to the final accumulator state
-        s_end[i] = A[:, a_lo_s[i]:a_hi_s[i]].sum(axis=1)
-    acc = (s_end - s_start) * seg["L"].to_numpy()[:, None]
+        e_hi[i], e_lo[i] = two_sum_rows(A[:, a_lo_s[i]:a_hi_s[i]], A_lo[:, a_lo_s[i]:a_hi_s[i]])
+    # difference the high and low parts separately: equal high parts cancel exactly, the low parts keep the increments
+    acc = ((e_hi - snap[ks]) + (e_lo - snap_lo[ks])) * seg["L"].to_numpy()[:, None]
     return seg, np.where(np.abs(acc) < 1e-300, 0.0, acc)
 
 
@@ -296,11 +335,21 @@ def hodl_walk(rows, d0: float, d1: float) -> tuple[float, float, float]:
 
 
 # ---------------------------------------------------------------------------------------------------------- per pool run
+def valuation_mids(pool: Pool) -> pl.DataFrame | None:
+    """Sane valuation price series for pools whose state can sit at extreme ticks (Aerodrome NVDAc/USDC did, for days):
+    mid after every real (non-dust) swap, dropping mids more than 2x from the rolling median of their 51 neighbours."""
+    if pool.chain == "robinhood":
+        return None
+    sw = pl.scan_parquet(SWAP_TABLES[pool.chain][0]).filter(pl.col("pool") == pool.key).select("ts", pl.col("mid_after").alias("mid")).collect().sort("ts")
+    med = pl.col("mid").rolling_median(window_size=51, center=True, min_samples=1)
+    return sw.with_columns(med.alias("_m")).filter((pl.col("mid") / pl.col("_m")).log().abs() <= math.log(2.0)).select("ts", "mid")
+
+
 def run_pool(pool: Pool, spy_path: pl.DataFrame | None) -> dict:
     t_start = time.time()
     pp: PoolPositions = reconstruct(pool)
     path = price_path(pool)
-    pricer = UsdPricer(pool, path, spy_path)
+    pricer = UsdPricer(pool, path, spy_path, valuation_mids(pool))
     pos, events = pp.positions, pp.events
     ticks = np.unique(np.concatenate([pos["lower"].to_numpy(), pos["upper"].to_numpy()]))
     rng = pos.select("pos_id", "lower", "upper").with_columns(
@@ -321,7 +370,7 @@ def run_pool(pool: Pool, spy_path: pl.DataFrame | None) -> dict:
     res = sweep(ticks, ev, swf)
 
     seg = seg.join(rng.select("pos_id", "a_lo", "a_hi", "lower", "upper"), on="pos_id")
-    seg, acc = segment_accruals(seg, ev, res["snap"], res["A"])
+    seg, acc = segment_accruals(seg, ev, res["snap"], res["A"], res["snap_lo"], res["A_lo"])
     tot = acc.reshape(-1, NR, NM).sum(axis=1)                 # (n_seg, NM) summed over regimes
     seg = seg.with_columns(*[pl.Series(m, tot[:, i]) for i, m in enumerate(METRICS)])
     long = []

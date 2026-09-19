@@ -211,8 +211,12 @@ class UsdPricer:
 
     USDG / USDC = $1. Stocks: the pool's own mid. QQQ/SPY: SPY valued with the SPY/USDG pool mid at the same timestamp."""
 
-    def __init__(self, pool: Pool, path: pl.DataFrame, spy_path: pl.DataFrame | None = None):
+    def __init__(self, pool: Pool, path: pl.DataFrame, spy_path: pl.DataFrame | None = None, val_mid: pl.DataFrame | None = None):
+        """val_mid (ts, mid): optional sane valuation series. When the pool state is more than 2x away from it (a dust swap
+        pushed the price through an empty range to an extreme tick), tokens are valued at val_mid instead: position
+        AMOUNTS still come from the real pool state, only their USD price is sanitised."""
         self.pool = pool
+        self.val = (val_mid["ts"].to_numpy().astype(np.float64), val_mid["mid"].to_numpy()) if val_mid is not None and val_mid.height else None
         self.ord = path["ord"].to_numpy()
         self.ts = path["ts"].to_numpy()
         self.sqrtp = path["sqrtp"].to_numpy()
@@ -242,6 +246,11 @@ class UsdPricer:
 
     def usd01(self, sqrtp, ts) -> tuple[np.ndarray, np.ndarray]:
         mid = mid_from_sqrtp(self.pool, sqrtp)
+        if self.val is not None:
+            t, m = self.val
+            ref = m[np.clip(np.searchsorted(t, np.asarray(ts, dtype=np.float64), side="right") - 1, 0, len(t) - 1)]
+            with np.errstate(divide="ignore", invalid="ignore"):
+                mid = np.where(np.abs(np.log(mid / ref)) > np.log(2.0), ref, mid)
         qu = self.quote_usd_at_ts(ts)
         base_usd = mid * qu
         return (base_usd, qu) if self.pool.base_is_0 else (qu, base_usd)
