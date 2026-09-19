@@ -1,4 +1,8 @@
-# Runtime Agent Week submission draft (DeltaDesk)
+#
+> **Submitted 2026-09-20 00:09 UTC+1 · reference `360170aa-dc44-4f0a-974a-ed85b844d105`.**
+> Tracks entered: Bankr grand prize (automatic), Dynamic, Uniswap. Still to do: the Uniswap Developer Feedback
+> Form (https://developers.uniswap.org/hackathon-feedback), and the Monday follow-up (live mint, owner exit).
+ Runtime Agent Week submission draft (DeltaDesk)
 
 These are the fields of the real form at https://runtime.nyc/submit. Field names, limits and rules are taken from the
 site's own `validation.js`, fetched on 2026-09-19. Required fields: project name, "What does it do?", your name,
