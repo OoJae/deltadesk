@@ -25,33 +25,39 @@ question for AMMs taking over equities market making. DeltaDesk measures the ans
 | What | Where |
 |---|---|
 | Web app: landing, Truth Study, Live desk, Tearsheet, League | https://web-production-10951.up.railway.app ([/study](https://web-production-10951.up.railway.app/study), [/live](https://web-production-10951.up.railway.app/live), [/tearsheet](https://web-production-10951.up.railway.app/tearsheet), [/league](https://web-production-10951.up.railway.app/league)) |
-| API | https://core-production-512e.up.railway.app ([/health](https://core-production-512e.up.railway.app/health), [/fair-value/NVDA](https://core-production-512e.up.railway.app/fair-value/NVDA), [/study](https://core-production-512e.up.railway.app/study)) |
+| Desk console: the agent's decisions, gate signals with their `reasonHash` preimages, and the lane's on-chain actions. Public, no wallet, no sign-in | [/console](https://web-production-10951.up.railway.app/console) |
+| The user's lane, read straight off the chain in the app. Public, no wallet: lane value, balances, operator gas, caps and the owner controls | [/desk/0x7f8968734E613f509991D3392074CF7f1e4bd662](https://web-production-10951.up.railway.app/desk/0x7f8968734E613f509991D3392074CF7f1e4bd662) |
+| API | [https://core-production-512e.up.railway.app/docs](https://core-production-512e.up.railway.app/docs) (Swagger) · [/health](https://core-production-512e.up.railway.app/health) · [/fair-value/NVDA](https://core-production-512e.up.railway.app/fair-value/NVDA) · [/study](https://core-production-512e.up.railway.app/study) |
 | Paid endpoints (x402 on Bankr, USDC on Base) | `https://x402.bankr.bot/0xd8d5b9389721258bcdfa7ac1306af6330e5634cd/<service>`: `safe-to-lp`, `fair-value`, `pool-toxicity`, `tearsheet`, `lp-league` |
 | First settled x402 call (a self-test from our own Bankr wallet) | `safe-to-lp?pool=NVDA`, $0.005 USDC, settled on Base in [`0x309ddc0c…6708`](https://basescan.org/tx/0x309ddc0cbc51eccddf649fa001a25ecdc049179e402bc6dad91e798c8c8e6708) (2026-09-19 06:20 UTC). Payer and payee are both DeltaDesk's wallet `0xd8d5…34cd`: it proves the x402 path settles end to end, not outside demand |
 | Bankr skill | [`skills/lp-truth/`](skills/lp-truth/SKILL.md). PRs to BankrBot/skills: `lp-truth` https://github.com/BankrBot/skills/pull/729, `hood-stock-lp ledger` https://github.com/BankrBot/skills/pull/730, `aero-stock-lp ledger` https://github.com/BankrBot/skills/pull/731 |
-| Desk contracts on Robinhood Chain (4663), deployed 2026-09-19 14:43 UTC, source-verified (Sourcify full match, creation + runtime; Blockscout reads Sourcify) | `DeskLaneFactory` [`0x6968B97974aF2ba51537e751c043d5ba48d663B3`](https://robinhoodchain.blockscout.com/address/0x6968B97974aF2ba51537e751c043d5ba48d663B3) · `ChainlinkFence` [`0xc82Cc6A466b7fE32e822A7dA59E7D9d7b726C1ea`](https://robinhoodchain.blockscout.com/address/0xc82Cc6A466b7fE32e822A7dA59E7D9d7b726C1ea) · `DeskLaneV3` implementation [`0xBf5f4880B2f569656E913d225bcF4810Dcc4EDD9`](https://robinhoodchain.blockscout.com/address/0xBf5f4880B2f569656E913d225bcF4810Dcc4EDD9) ([`contracts/deployments/4663.json`](contracts/deployments/4663.json)) |
+| Desk contracts on Robinhood Chain (4663), deployed 2026-09-19 14:43 UTC. All three source-verified on **Sourcify**, full match, creation + runtime (verify with `forge verify-contract --verifier sourcify`); Blockscout mirrors Sourcify and today shows the banner on two of the three, so the Sourcify link is the one that proves it for each | `DeskLaneFactory` [`0x6968B97974aF2ba51537e751c043d5ba48d663B3`](https://robinhoodchain.blockscout.com/address/0x6968B97974aF2ba51537e751c043d5ba48d663B3) ([Sourcify](https://repo.sourcify.dev/4663/0x6968B97974aF2ba51537e751c043d5ba48d663B3)) · `ChainlinkFence` [`0xc82Cc6A466b7fE32e822A7dA59E7D9d7b726C1ea`](https://robinhoodchain.blockscout.com/address/0xc82Cc6A466b7fE32e822A7dA59E7D9d7b726C1ea) ([Sourcify](https://repo.sourcify.dev/4663/0xc82Cc6A466b7fE32e822A7dA59E7D9d7b726C1ea) — Blockscout has not picked this one up) · `DeskLaneV3` implementation [`0xBf5f4880B2f569656E913d225bcF4810Dcc4EDD9`](https://robinhoodchain.blockscout.com/address/0xBf5f4880B2f569656E913d225bcF4810Dcc4EDD9) ([Sourcify](https://repo.sourcify.dev/4663/0xBf5f4880B2f569656E913d225bcF4810Dcc4EDD9)) ([`contracts/deployments/4663.json`](contracts/deployments/4663.json)) |
 | The user's lane (lane A, NVDA/USDG) | [`0x7f8968734E613f509991D3392074CF7f1e4bd662`](https://robinhoodchain.blockscout.com/address/0x7f8968734E613f509991D3392074CF7f1e4bd662), created by the user's Vault in [`0x0e104b50…a158`](https://robinhoodchain.blockscout.com/tx/0x0e104b50393b85a91509cd18a583f4c340f3a56430f14d6349c42efe6e34a158) and funded in [`0xb752721c…26e8`](https://robinhoodchain.blockscout.com/tx/0xb752721c10d72aa7a6f0a4e7a1a58cbe6b47f3cb68a021e871013c6980d826e8) (25.8 USDG) and a bounded USDG→NVDA swap straight into the lane, [`0x15d6667e…906c`](https://robinhoodchain.blockscout.com/tx/0x15d6667e38b7da82ab66c4c41d57f39f6743e56ba0e739cbe2fc80a64e53906c) (0.1123 NVDA); ≈ $50.75 in total |
 | The agent's on-chain decision | A delegated `signal()` `LaneAction` for the weekend gate: [`0xddbc1b92…7375`](https://robinhoodchain.blockscout.com/tx/0xddbc1b92b20332ddee6e2ec587e27246021c42b2b51444e848fab7e0d4fe7375) (weekend: market closed) and [`0xbe80e98b…3223`](https://robinhoodchain.blockscout.com/tx/0xbe80e98beb80f8f87275b01568fd451fe4ceea35881fe74c106e2826ed083223) (fair value restored), each with a `reasonHash` whose preimage is recorded |
 | Dynamic policy denial of a staged malicious transfer request (the call a prompt injection would try), sent straight to the delegated signer | Dynamic's policy API refuses Robinhood Chain (`Unsupported chainIds for EVM: 4663`), so on 4663 the lane contract and the agent's ABI are the fence. On Base, an environment rule (allowlist = the lane address) made Dynamic's co-signer refuse the delegated Operator's staged USDC transfer (the session was dropped after 61.6 s, nothing signed), while the same key signed an allowed destination in 2.3 s: [docs/m2-desk.md §3](docs/m2-desk.md) |
 | Start a desk / desk agent | https://web-production-10951.up.railway.app/desk · https://desk-agent-production-71b1.up.railway.app/health |
+| Sign-in environment | Sign-in uses Dynamic's **sandbox** environment, so their widget shows a Sandbox badge. Only the sign-in environment is a sandbox. The Vault and the Operator are real embedded wallets, the delegation is real, and every transaction above is real and landed on Robinhood Chain 4663 — the lane, its funding and the agent's `signal()` calls are all linked here and readable on the explorer |
 | Demo video | https://youtu.be/pjpZgsKzxQY |
 
-Every on-chain value from today is recorded, with its explorer link, in [`docs/m2-desk.md`](docs/m2-desk.md).
+Every 4663 on-chain value above — the deployment, the lane, its funding and the agent's decisions — is recorded, with
+its explorer link, in [`docs/m2-desk.md`](docs/m2-desk.md).
 
 ## What we found
 
-**Data.** 3.34M swaps and $1.07B of volume, from each pool's launch to Sep 18 2026:
+**Data.** 3.41M swaps and $1.09B of volume, from each pool's launch to 2026-09-20:
 
 - NVDA/USDG on Uniswap v3;
 - SPY/USDG, TSLA/USDG and QQQ/SPY on Uniswap v4.
 
-**Findings.**
+**Findings**, read off the live [Study](https://web-production-10951.up.railway.app/study) on 2026-09-20. The pipeline
+recomputes every 10 minutes and never stops, so the live page's totals run a little ahead of the numbers below and its
+ratios drift by a hundredth or two.
 
-- **NVDA/USDG LPs earned $362.9k in fees; informed flow took back $289.5k** (vs Hyperliquid, 1h). Edge 1.25: LPs keep
+- **NVDA/USDG LPs earned $371.8k in fees; informed flow took back $289.1k** (vs Hyperliquid, 1h). Edge 1.29: LPs keep
   money, but barely.
 - **Regular hours are a losing game** (edge 0.92). The Monday 09:00 ET hour runs at 0.25.
-- **Weekends pay** (edge 3.50), but self-markouts overstated that edge: by 20% at 1h and 2.7× at 5m.
-- **Three bot operators account for 98.6% of NVDA LPs' net losses to informed flow.**
+- **Weekends pay** (edge 3.97), but self-markouts overstated that edge: by 24% at 1h and 2.6× at 5m.
+- **Three bot operators account for 98.4% of NVDA LPs' net losses to informed flow.**
   - Hyperliquid-arbitrage bots pay 37% of fees and take 66% of the positive value picked off.
   - Retail and aggregator flow pays LPs.
 - **Only 39.8% of NVDA positions beat holding.**
@@ -62,9 +68,9 @@ Every on-chain value from today is recorded, with its explorer link, in [`docs/m
   - 1,938 fully collected (NFT-burned) positions of $1k or more match on-chain collects within 1 bp.
   - Golden positions match within 0.0011 bp.
 - **On Aerodrome (Base), emissions are what pay LPs.**
-  - NVDAc/USDC swap fees cover 0.97× what informed flow takes.
-  - 82% of fees go to veAERO voters.
-  - Fees kept plus AERO received cover it 1.22×.
+  - NVDAc/USDC swap fees cover 0.98× what informed flow takes.
+  - 83% of fees go to veAERO voters.
+  - Fees kept plus AERO received cover it 1.25×.
   - AERO attributed to positions equals AERO distributed, exactly. For the 467 wallets with nothing still staked,
     computed AERO matches on-chain claims plus penalties within 4e-8.
 - **Honest negative result:** a fair-value gap rule tuned in-sample failed out of sample (−$128). The simple reopen
@@ -74,7 +80,7 @@ Full write-ups: [docs/m1-truth-study.md](docs/m1-truth-study.md) (M1) · [docs/m
 
 ## How it answers Igor's question
 
-**Pool level.** In NVDA/USDG, for every $80 of fees, about $64 was picked off by informed flow at 1h. Most of it went
+**Pool level.** In NVDA/USDG, for every $80 of fees, about $62 was picked off by informed flow at 1h. Most of it went
 to three operators.
 
 **Position level.** The tearsheet splits any wallet's LP positions into:
@@ -98,16 +104,12 @@ open PR #670, where that skill lives today) and `aero-stock-lp`
 costs $0.05 over x402, and a failed call is not charged.
 
 **Before the trade.** `safe-to-lp` turns the same history into ALLOW / CAUTION / BLOCK
-([`assess`](engine/api/app.py#L106)):
+([`assess`](engine/api/app.py#L128)):
 
 - **BLOCK:** the reopen guard (09:20–09:45 ET, the one rule positive out of sample), and hours where informed flow
   historically took more than twice the fees.
 - **CAUTION:** closed-market weekends and holidays, the evening session wake, losing hours, a dead Chainlink feed, and a
   fair-value gap. The gap threshold is unvalidated (the gap rule failed out of sample), so a gap alone never blocks.
-
-A response whose `thresholds.source` is `"provisional"` comes from the API's earlier build. That build could also BLOCK
-on the gap alone, and through the whole Sunday-evening reopen. When this README was written (Sep 19), the live API
-still served that build.
 
 ## Product
 
@@ -115,7 +117,7 @@ still served that build.
 |---|---|---|
 | **Truth Study** | Pool × regime × hour-of-week fee vs picked-off heatmaps; the Flow X-ray (who takes LP money) | Public web + `/study`, `/study/table/*` |
 | **Tearsheet** | Paste a wallet on Robinhood Chain or Base (Aerodrome, staked or unstaked). Returns fees kept, AERO, picked off (vs HL), IL vs HODL, price P&L, gas and net, each per $1k, plus a reconciliation residual | `/tearsheet/{robinhood\|base}/{wallet}` (x402, $0.05) |
-| **LP League** | 1,003 LP managers ranked by result vs holding per $1k·day, with strategy fingerprints | `/lp-league` (x402, $0.02) |
+| **LP League** | 1,018 LP managers ranked by result vs holding per $1k·day, with strategy fingerprints | `/lp-league` (x402, $0.02) |
 | **Safe to LP?** | ALLOW / CAUTION / BLOCK from the market regime, the open guard, this hour's historical toxicity, the gap to HL fair value and oracle health | `/safe-to-lp/{pool}` (x402, $0.005) |
 | **Fair value** | HL 24/7 price × a session-calibrated basis, vs the pool mid and Chainlink (frozen on weekends) | `/fair-value/{pool}` (public) |
 | **`lp-truth` skill** | Bankr skill that calls the endpoints above over x402 | [skills/lp-truth/](skills/lp-truth/SKILL.md) |
@@ -282,10 +284,11 @@ DeskLaneFactory ── DeskLaneV3 clone per lane (owner = Vault) ── Uniswap 
 - the agent with guard, executor, Dynamic signer, webhook and watchdog;
 - the Start a desk wizard and owner controls.
 
-**Today (Sat Sep 19), inside the closed window.** The desk refuses to add risk on weekends by design, and the
-contract enforces it. So today's on-chain evidence is:
+**This weekend (Sat Sep 19 – Sun Sep 20), inside the closed window.** The desk refuses to add risk on weekends by
+design, and the contract enforces it: the closed window runs Sat 00:00 → Mon 01:00 UTC. So the weekend's on-chain
+evidence is:
 
-- the contracts, deployed and verified (done, 14:43 UTC; addresses above);
+- the contracts, deployed and verified (done, Sep 19 14:43 UTC; addresses above);
 - the user's lane, created by their Vault and funded;
 - the Dynamic-delegated Operator;
 - the agent's first on-chain decision, a delegated `signal()` for the weekend gate;
@@ -373,7 +376,7 @@ contract enforces it. So today's on-chain evidence is:
 | Gap-exclusion backtest | [`gap_exclusion.run`](engine/backtest/gap_exclusion.py#L477) |
 | LP League score | [`league.build`](engine/league/build.py#L27) |
 | Aerodrome: pool study; staked/unstaked fees, AERO reward sweep, penalties | [engine/aero/study.py](engine/aero/study.py), [engine/aero/positions.py](engine/aero/positions.py) |
-| `/safe-to-lp` decision function | [`assess`](engine/api/app.py#L106) |
+| `/safe-to-lp` decision function | [`assess`](engine/api/app.py#L128) |
 | v3 `slot0` / v4 `StateView.getSlot0` pool mids | [`pool_mid`](engine/api/live.py#L90) |
 | 1-second tape recorder (HL bbo/ctx/trades, Robinhood quotes, corporate actions) | [recorder/tape.mjs](recorder/tape.mjs) |
 | Refresh pipeline | [engine/pipeline/refresh.py](engine/pipeline/refresh.py) |
@@ -404,7 +407,7 @@ uv run python -m markout.study && uv run python -m markout.hl_ref
 uv run python -m positions.attribute && uv run python -m league.build
 uv run python -m flow.xray && uv run python -m backtest.gap_exclusion
 uv run python -m aero.study && uv run python -m aero.positions        # Base / Aerodrome
-uv run python -m pytest tests -q  # 133 tests
+uv run python -m pytest tests -q  # 133 tests (32 of them need the pipeline output above; they skip without it)
 uv run uvicorn api.app:app --port 8787
 cd ../web && npm i && DELTADESK_API=http://127.0.0.1:8787 npm run dev
 ```
@@ -418,9 +421,10 @@ docker run -p 8787:8787 -e ENVIO_API_TOKEN=… -v $PWD/data:/app/data deltadesk
 
 The desk:
 
-- `cd contracts && forge test`, and `FOUNDRY_PROFILE=fork forge test` with an archive RPC;
+- `cd contracts && ./setup.sh && forge test` (177 tests; `setup.sh` fetches the pinned `lib/` and `node_modules/`,
+  which are not committed), and `FOUNDRY_PROFILE=fork forge test` with an archive RPC;
 - `cd agent && pnpm install && pnpm typecheck && pnpm test`.
 
 Run modes and the Docker targets for `desk-agent` and `desk-watchdog` are in [agent/README.md](agent/README.md).
 
-Informational analytics, not investment advice.
+MIT ([LICENSE](LICENSE), [NOTICE](NOTICE)). Informational analytics, not investment advice.

@@ -6,10 +6,10 @@ description: The truth about LPing tokenized stocks. Before adding or re-ranging
 # lp-truth: what market making tokenized stocks actually pays
 
 LP fees on tokenized-stock pools look great until you subtract what informed traders take back. Across every swap in
-Robinhood Chain's NVDA/USDG pool from launch to Sep 18 2026, LPs earned **$362.9k in fees and gave back $289.5k** to
+Robinhood Chain's NVDA/USDG pool from launch to Sep 20 2026, LPs earned **$371.8k in fees and gave back $289.1k** to
 flow that knew where the price was going (marked against Hyperliquid's 24/7 price 1 hour later). In the Monday 09:00 ET
 hour, informed flow takes about **$4 for every $1 of fees** (edge 0.25). On Aerodrome's NVDAc/USDC pool, swap fees
-alone don't cover informed flow (edge 0.97); AERO emissions are what make LPing pay (1.22 with AERO). This skill tells
+alone don't cover informed flow (edge 0.98); AERO emissions are what make LPing pay (1.25 with AERO). This skill tells
 your user, before they commit capital, whether *right now* is one of those moments, and afterwards exactly where their
 P&L came from.
 

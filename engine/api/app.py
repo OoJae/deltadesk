@@ -26,7 +26,9 @@ from functools import lru_cache
 from pathlib import Path
 
 import polars as pl
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from api import live
 
@@ -37,14 +39,34 @@ app = FastAPI(title="DeltaDesk", version="0.1.0", description="The open market-m
 API_KEY = os.environ.get("DELTADESK_API_KEY", "")
 REQUIRE_KEY = bool(os.environ.get("RAILWAY_ENVIRONMENT")) or os.environ.get("DELTADESK_REQUIRE_KEY") == "1"
 
+# Where an agent pays. The 402 body carries this itself: a caller that hits a premium route has no other way to find it.
+X402_BASE = os.environ.get("DELTADESK_X402_BASE", "https://x402.bankr.bot/0xd8d5b9389721258bcdfa7ac1306af6330e5634cd")
+# First path segment -> (x402 service, price in USDC). Prices are bankr.x402.json's; /basis, /pipeline and /admin are
+# ours only and are not sold, so they get the base URL without a service.
+X402_SERVICES = {"safe-to-lp": 0.005, "fair-value": 0.002, "pool-toxicity": 0.01, "tearsheet": 0.05, "lp-league": 0.02}
 
-def premium(x_deltadesk_key: str = Header(default="")):
+
+def _x402_terms(path: str) -> dict:
+    service = path.strip("/").split("/")[0]
+    if service not in X402_SERVICES:
+        return {"x402": X402_BASE, "note": "this route is not sold over x402; it is internal to DeltaDesk"}
+    return {"x402": f"{X402_BASE}/{service}", "price_usdc": X402_SERVICES[service], "network": "base", "currency": "USDC"}
+
+
+@app.exception_handler(StarletteHTTPException)
+async def _http_error(_request: Request, exc: StarletteHTTPException) -> JSONResponse:
+    """A dict detail is returned flat, so a 402 can carry machine-readable payment terms; strings keep {"detail": …}."""
+    body = exc.detail if isinstance(exc.detail, dict) else {"detail": exc.detail}
+    return JSONResponse(body, status_code=exc.status_code, headers=getattr(exc, "headers", None))
+
+
+def premium(request: Request, x_deltadesk_key: str = Header(default="")):
     if not API_KEY:
         if REQUIRE_KEY:
             raise HTTPException(503, "premium routes disabled: the server key is not configured")
         return
     if not hmac.compare_digest(x_deltadesk_key, API_KEY):
-        raise HTTPException(402, "premium endpoint: pay per call via x402 (see /health for the marketplace URL)")
+        raise HTTPException(402, {"detail": "premium endpoint: pay per call via x402", **_x402_terms(request.url.path)})
 
 
 DISCLAIMER = "Informational analytics, not investment advice. Self-markout and HL-referenced estimates; see /study for method."
@@ -147,10 +169,37 @@ def _pipeline_state() -> dict:
         return {}
 
 
+PUBLIC_ROUTES = ["/health", "/study", "/study/tables", "/study/table/{scope}/{name}", "/study/aero", "/fair-value/{pool}", "/docs", "/openapi.json"]
+PREMIUM_ROUTES = ["/safe-to-lp/{pool}", "/pool-toxicity/{pool}", "/tearsheet/{chain}/{wallet}", "/lp-league", "/basis/{pool}"]
+
+
+@app.get("/")
+def index():
+    """Service index: what this API is, what is free, what is paid and where to pay for it."""
+    return {
+        "service": "DeltaDesk API",
+        "version": app.version,
+        "what": "The LP truth layer for tokenized stocks on Robinhood Chain (4663) and Aerodrome (Base).",
+        "web": "https://web-production-10951.up.railway.app",
+        "repo": "https://github.com/OoJae/deltadesk",
+        "docs": "/docs",
+        "public": PUBLIC_ROUTES,
+        "premium": PREMIUM_ROUTES,
+        "x402": {"base": X402_BASE, "network": "base", "currency": "USDC", "prices_usdc": X402_SERVICES},
+        "disclaimer": DISCLAIMER,
+    }
+
+
 @app.get("/health")
 def health():
     steps = {k: {"ok": v.get("ok"), "rc": v.get("rc"), "ran_at": v.get("ran_at"), "secs": v.get("secs")} for k, v in _pipeline_state().items()}
-    return {"ok": True, "time": time.time(), "pipeline_running": (live.DATA / "pipeline.lock").exists(), "pipeline": steps}
+    return {
+        "ok": True,
+        "time": time.time(),
+        "pipeline_running": (live.DATA / "pipeline.lock").exists(),
+        "pipeline": steps,
+        "x402_base": X402_BASE,  # the marketplace URL the 402 bodies point at
+    }
 
 
 @app.get("/pipeline", dependencies=[Depends(premium)])
@@ -277,11 +326,43 @@ def basis(pool: str):
     return {"pool": p.key, **live.basis(p.key), "hl_ref": live.HL_REF[p.key], "as_of": time.time()}
 
 
+# The M0 columns (picked_1h, edge_1h, lp_net_bps_1h) are SELF-markouts: the pool's own price 1 h later. Every
+# user-facing surface (the web Study, the README, the skills) quotes the HL-referenced numbers instead, which are
+# lower-edged and honest about weekend arbitrage. /study carries both, labelled, so an agent can't read one for the
+# other and end up disagreeing with the site.
+HL_JOIN_COLS = ["fee_1h", "picked_hl_1h", "edge_hl_1h", "lp_net_hl_bps_1h"]
+
+
+def _hl_ref_table(name: str) -> pl.DataFrame | None:
+    f = STUDY / "m1" / "hl_ref" / f"{name}.parquet"
+    return _scope_table(str(f), f.stat().st_mtime) if f.exists() else None
+
+
+def _with_hl_ref(df: pl.DataFrame, name: str, keys: list[str]) -> pl.DataFrame:
+    hl = _hl_ref_table(name)
+    if hl is None:
+        return df
+    cols = keys + [c for c in HL_JOIN_COLS if c in hl.columns]
+    if not all(k in hl.columns for k in keys):
+        return df
+    return df.join(hl.select(cols), on=keys, how="left")
+
+
 @app.get("/study")
 def study():
-    by_pool = table("by_pool").select("pool", "swaps", "vol_usd", "fee_usd", "picked_1h", "edge_1h", "lp_net_bps_1h")
-    by_regime = table("by_regime").select("pool", "regime", "fee_usd", "picked_1h", "edge_1h", "lp_net_bps_1h")
-    return {"title": "Can LPs beat LVR on tokenized stocks?", "by_pool": rows(by_pool), "by_regime": rows(by_regime), "disclaimer": DISCLAIMER}
+    by_pool = _with_hl_ref(table("by_pool").select("pool", "swaps", "vol_usd", "fee_usd", "picked_1h", "edge_1h", "lp_net_bps_1h"), "by_pool", ["pool"])
+    by_regime = _with_hl_ref(table("by_regime").select("pool", "regime", "fee_usd", "picked_1h", "edge_1h", "lp_net_bps_1h"), "by_regime", ["pool", "regime"])
+    return {
+        "title": "Can LPs beat LVR on tokenized stocks?",
+        "references": {
+            "picked_1h / edge_1h / lp_net_bps_1h": "self-markout: the pool's own price 1 h after the swap (M0)",
+            "picked_hl_1h / edge_hl_1h / lp_net_hl_bps_1h": "Hyperliquid-referenced 1 h markout (M1). These are the figures the web Study, the README and the skills quote",
+            "fee_1h": "LP fees on the swaps with a valid HL reference (slightly below fee_usd, which is every swap)",
+        },
+        "by_pool": rows(by_pool),
+        "by_regime": rows(by_regime),
+        "disclaimer": DISCLAIMER,
+    }
 
 
 STUDY_SCOPES = {"m0": STUDY / "m0", "hl_ref": STUDY / "m1" / "hl_ref", "flow": STUDY / "m1" / "flow",

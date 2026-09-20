@@ -87,9 +87,13 @@ def test_premium_fails_closed_on_railway(monkeypatch):
     monkeypatch.setattr(appmod, "API_KEY", "")
     monkeypatch.setattr(appmod, "REQUIRE_KEY", True)
     c = TestClient(appmod.app)
-    assert c.get("/lp-league").status_code == 503          # misconfigured server: closed, not open
+    closed = "premium routes disabled: the server key is not configured"
+    r = c.get("/lp-league")
+    assert r.status_code == 503 and r.json()["detail"] == closed   # misconfigured server: closed, not open
     monkeypatch.setattr(appmod, "REQUIRE_KEY", False)
-    assert c.get("/lp-league").status_code != 503          # local dev without a key stays open
+    # Local dev without a key stays open. Without a built data/ the route still 503s ("LP League not built yet"), so
+    # assert on the reason, not the status: the two 503s mean opposite things.
+    assert c.get("/lp-league").json().get("detail") != closed
 
 
 def test_mid_from_sqrt_orientation():

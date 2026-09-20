@@ -1,7 +1,13 @@
 # BankrBot/skills PRs (ready to paste)
 
-We prepared three local branches in `../bankr-skills`, a clone of https://github.com/BankrBot/skills. Nothing is
-pushed yet. Each branch has one commit, with no attribution lines.
+We prepared three local branches in `../bankr-skills`, a clone of https://github.com/BankrBot/skills. Each branch has
+one commit, with no attribution lines. All three are now open as PRs: `lp-truth`
+https://github.com/BankrBot/skills/pull/729, `hood-stock-lp ledger` https://github.com/BankrBot/skills/pull/730,
+`aero-stock-lp ledger` https://github.com/BankrBot/skills/pull/731.
+
+The PR bodies below are reproduced as they were submitted. Their figures are the Sep 18 2026 snapshot; the live Study
+recomputes every 10 minutes, so https://web-production-10951.up.railway.app/study runs a little ahead of them (on
+Sep 20: 3.41M swaps, $1.09B, NVDA/USDG fees $371.8k vs $289.1k picked off, edge 1.29; Aerodrome 0.98× and 1.25×).
 
 | Branch | Base | Commit | Adds |
 |---|---|---|---|

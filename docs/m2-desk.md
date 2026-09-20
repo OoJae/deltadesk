@@ -1,18 +1,23 @@
 # The desk (M2): live record
 
 The M2 live record on Robinhood Chain (4663): deployment, the advisory run, the policy denial, the ~$50 delegated
-mint, the owner exit and the regular-session reconciliation re-run. It is a **skeleton** until Phase 5 runs (Mon Sep 21
-or later, with the user present). Every field is TBD, and a value is filled in only from a real transaction, log or
-command output, never estimated. Transaction hashes link to `https://robinhoodchain.blockscout.com/tx/<hash>`,
-addresses to `…/address/<address>`.
+mint, the owner exit and the regular-session reconciliation re-run. **Sections 1, 3, 3b and 3c are complete and every
+value in them is from a real transaction, log or command output, never estimated. Sections 2, 4, 5 and 6 run in a
+regular session on Mon Sep 21, with the user present, and are marked TBD until then** — the desk refuses to add risk
+inside the closed window (Sat 00:00 → Mon 01:00 UTC) and the contract enforces that, so nothing there could have been
+run on Saturday. Transaction hashes link to `https://robinhoodchain.blockscout.com/tx/<hash>`, addresses to
+`…/address/<address>`.
 
 | M2 exit criterion | Section | Status |
 |---|---|---|
-| 3. Deployed and verified on 4663; `desk-agent` through ≥ 1 regular session in advisory + DRY_RUN, no alerts | 1, 2 | TBD |
-| 4. One recorded Dynamic policy denial on the Operator wallet | 3 | TBD |
-| 5. One live delegated mint of ~$50: matched LaneAction, `reasonHash` preimage, position on the lane's tearsheet | 4 | TBD |
-| 6. Owner Exit & withdraw executed live from `/desk` | 5 | TBD |
-| M1 carry-over: regular-session reconciliation re-run | 6 | TBD |
+| 3. Deployed and verified on 4663; `desk-agent` through ≥ 1 regular session in advisory + DRY_RUN, no alerts | 1, 2 | **Deployment and verification done** (§1, Sat Sep 19 14:43 UTC); the regular-session advisory run is Mon Sep 21 (§2) |
+| 4. One recorded Dynamic policy denial on the Operator wallet | 3 | **Done** (§3, Sat Sep 19 15:10–15:40 UTC) |
+| 5. One live delegated mint of ~$50: matched LaneAction, `reasonHash` preimage, position on the lane's tearsheet | 4 | TBD (Mon Sep 21) |
+| 6. Owner Exit & withdraw executed live from `/desk` | 5 | TBD (Mon Sep 21) |
+| M1 carry-over: regular-session reconciliation re-run | 6 | TBD (Mon Sep 21) |
+
+Beyond the exit criteria, two things already happened on-chain and are recorded below: the lane was created and funded
+by its owner (§1, §3c) and the agent made its first delegated on-chain decisions (§3b).
 
 ## 1 · Contract deployment and Blockscout verification
 
@@ -46,24 +51,29 @@ addresses to `…/address/<address>`.
   `CheckDeployment: OK`; fence USDG 0.99995090 code 0; NVDA 222.44729849 code 5 (market closed: Saturday).
 - `pendingImplementation(1)` at deploy (expected none): none (first registration is instant).
 
-**Lane A**
+**Lane A** (created 2026-09-19 15:10:44 UTC through the `/desk` wizard; every value below is read from the chain)
 
 | Field | Value |
 |---|---|
-| Vault (owner) | TBD |
-| Operator (delegated embedded wallet, or Plan B server wallet) | TBD |
-| Guardian (watchdog key) | TBD |
-| `predictLane` address | TBD |
-| `createLane` tx (sent by the Vault) | TBD |
-| Lane address (== prediction) | TBD |
-| `LaneCreated` / `LaneListed` logs | TBD / TBD |
-| `listed(lane)` / `lanesOf(vault)` | TBD / TBD |
-| Caps (expected the M2 defaults) | TBD |
-| `CheckDeployment` with `LANE=<lane>` | TBD |
-| Lane funding txs (USDG, NVDA; amounts) | TBD |
-| Gas top-ups (Vault, Operator) | TBD |
+| Vault (owner) | [`0x397634DfbE552eBA34eFF652fe4ca0B05794B85A`](https://robinhoodchain.blockscout.com/address/0x397634DfbE552eBA34eFF652fe4ca0B05794B85A) (Dynamic embedded wallet, never delegated) |
+| Operator (delegated embedded wallet) | [`0x86629b04811741860E211c84003E3B143d6E3678`](https://robinhoodchain.blockscout.com/address/0x86629b04811741860E211c84003E3B143d6E3678) (embedded, not the Plan B server wallet) |
+| Guardian (watchdog key) | [`0x01BFF09B19F7eedcdD33ba0Da1bA8f191707d89f`](https://robinhoodchain.blockscout.com/address/0x01BFF09B19F7eedcdD33ba0Da1bA8f191707d89f) |
+| `predictLane` address | `0x7f8968734E613f509991D3392074CF7f1e4bd662` — the wizard predicts it before the lane exists (CREATE2 salt over every param) and the Dynamic policy allowlist is written against the prediction (§3); the lane deployed at exactly that address |
+| `createLane` tx (sent by the Vault) | [`0x0e104b50…a158`](https://robinhoodchain.blockscout.com/tx/0x0e104b50393b85a91509cd18a583f4c340f3a56430f14d6349c42efe6e34a158) — block 67,179,062, status 1, 433,413 gas, from the Vault to the factory `0x6968…63B3`, selector `0x141880c9`, value 0, 5 logs |
+| Lane address (== prediction) | [`0x7f8968734E613f509991D3392074CF7f1e4bd662`](https://robinhoodchain.blockscout.com/address/0x7f8968734E613f509991D3392074CF7f1e4bd662) |
+| `LaneCreated` / `LaneListed` logs | Both in the `createLane` receipt, emitted by the factory: `LaneCreated(owner = Vault, lane = 0x7f89…d662, …)` with kind 1 and pool `0xd4EB…14a3`, then `LaneListed(owner = Vault, lane = 0x7f89…d662)` |
+| `listed(lane)` / `lanesOf(vault)` | `true` / `[0x7f8968734E613f509991D3392074CF7f1e4bd662]` (§3) |
+| Caps (the M2 defaults) | From the lane's own creation log: `maxDeployUsd6` 60,000,000 = **$60** per rerange, `maxTurnoverUsd6PerDay` 150,000,000 = **$150**/day; 4 reranges per hour, 24 per day, ≥ 5 min apart |
+| `CheckDeployment` with `LANE=<lane>` | Mon Sep 21, with §4 |
+| Lane funding txs (USDG, NVDA; amounts) | USDG: [`0xb752721c…26e8`](https://robinhoodchain.blockscout.com/tx/0xb752721c10d72aa7a6f0a4e7a1a58cbe6b47f3cb68a021e871013c6980d826e8) — block 67,223,194, status 1, 74,286 gas, 2026-09-19 16:24:49 UTC, a USDG `transferFrom` of **25.796085 USDG** from `0xf70d…dbef` to the lane (the owner's funding route; the lane's USDG balance reads 25.796085 today). NVDA: the bounded USDG→NVDA swap straight into the lane, [`0x15d6667e…906c`](https://robinhoodchain.blockscout.com/tx/0x15d6667e38b7da82ab66c4c41d57f39f6743e56ba0e739cbe2fc80a64e53906c) — **0.112258293 NVDA** (§3c). ≈ $50.75 in total |
+| Gas top-ups (Vault, Operator) | Sent before creation; the live balances are on [`/desk/0x7f8968734E613f509991D3392074CF7f1e4bd662`](https://web-production-10951.up.railway.app/desk/0x7f8968734E613f509991D3392074CF7f1e4bd662), which reads them from the chain without a wallet |
 
 ## 2 · `desk-agent` advisory run (advisory + DRY_RUN)
+
+Runs Mon Sep 21, the first regular session after the deployment: Saturday and Sunday are inside the closed window, so
+there is no regular session to run it in. The agent is live and ticking now — its decisions and gate signals are public
+at [/console](https://web-production-10951.up.railway.app/console) — but the row below is only filled from a completed
+regular session.
 
 | Field | Value |
 |---|---|
@@ -180,6 +190,8 @@ Run in a regular session, 10:00–15:30 ET, outside 09:20–09:45, with the desk
 
 ## 5 · Owner exit and withdraw (from `/desk`, signed by the Vault)
 
+Runs Mon Sep 21, straight after §4: the exit has to have something to exit.
+
 | Field | Value |
 |---|---|
 | Date / time (ET) | TBD |
@@ -195,7 +207,8 @@ Run in a regular session, 10:00–15:30 ET, outside 09:20–09:45, with the desk
 
 ## 6 · Regular-session reconciliation re-run (M1 carry-over)
 
-The M1 fee reconciliation (`engine/indexer/reconcile.py`) re-run over a regular session, the same day.
+The M1 fee reconciliation (`engine/indexer/reconcile.py`) re-run over a regular session, the same day. Runs
+Mon Sep 21; the M1 result it re-checks is in [docs/m1-truth-study.md](m1-truth-study.md).
 
 | Field | Value |
 |---|---|

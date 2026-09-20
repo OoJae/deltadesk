@@ -17,7 +17,8 @@ type PoolLive = {
     reasons: Reason[];
     regime: string;
     reopen_window: boolean;
-    next_regime_change: null | { at: number; regime: string };
+    // The boundary is the next change of EITHER the regime name OR its reopen sub-state, so the name can repeat.
+    next_regime_change: null | { at: number; regime: string; reopen_window: boolean };
     // The API's gap rule only ever raises CAUTION (engine/api/app.py GAP_CAUTION: 15 bp regular … 60 bp weekend).
     thresholds: { gap_caution_bps: number; source?: string };
     hour_of_week_record?: HourRecord | null;
@@ -90,7 +91,10 @@ export default function LiveDesk() {
               </div>
               {regime.next_regime_change && (
                 <div className="space-y-2 md:col-span-5 md:text-right">
-                  <Label as="p">Next: {REGIME_LABEL[regime.next_regime_change.regime] ?? regime.next_regime_change.regime}</Label>
+                  <Label as="p">
+                    Next: {REGIME_LABEL[regime.next_regime_change.regime] ?? regime.next_regime_change.regime}
+                    {regime.next_regime_change.reopen_window && " (reopen window)"}
+                  </Label>
                   <p className="font-mono text-title leading-none text-paper tabular">
                     <span className="sr-only">in </span>
                     {until(regime.next_regime_change.at, now)}

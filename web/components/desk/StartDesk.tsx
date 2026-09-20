@@ -479,6 +479,11 @@ function SignInStep({ session }: { session: DeskSession }) {
         <Btn kind="primary" onClick={session.signIn}>
           Sign in with email
         </Btn>
+        <p className="max-w-[68ch] text-[0.82rem] leading-relaxed text-paper-dim">
+          Dynamic&apos;s widget is on their <strong>sandbox</strong> environment, so it shows a Sandbox badge. Only the sign-in environment is a sandbox: the Vault and the
+          Operator are real embedded wallets, the delegation is real, and every transaction is real and lands on Robinhood Chain {CHAIN_ID} — including the lane, the funding
+          and the agent&apos;s signals linked from the README.
+        </p>
       </div>
     );
   return (
@@ -495,6 +500,11 @@ function SignInStep({ session }: { session: DeskSession }) {
 function OperatorStep({ session, vault, onPick }: { session: DeskSession; vault: Address | null; onPick: (a: Address, kind: "embedded" | "server") => void }) {
   const action = useAction();
   const [planB, setPlanB] = useState(false);
+  // Plan B only exists when this deployment's desk-agent holds a Dynamic server wallet. Probe once, so we never offer
+  // a button that can only fail (the route answers 404 "no server-wallet operator is configured" when it is unset).
+  const planBProbe = usePoll(() => deskApi<{ address?: string }>("/operator-address"), 300_000, "planb:probe");
+  const planBProbed = planBProbe.data !== undefined || planBProbe.error !== null;
+  const planBOffered = planBProbe.data?.ok === true;
   const create = () =>
     action.run("Creating the Operator wallet…", async () => {
       try {
@@ -535,11 +545,19 @@ function OperatorStep({ session, vault, onPick }: { session: DeskSession; vault:
         <Btn kind="primary" disabled={action.busy} onClick={create}>
           Create Operator wallet
         </Btn>
-        <Btn kind={planB ? "secondary" : "ghost"} disabled={action.busy} onClick={serverWallet}>
-          Use DeltaDesk&apos;s server wallet (Plan B)
-        </Btn>
+        {planBOffered && (
+          <Btn kind={planB ? "secondary" : "ghost"} disabled={action.busy} onClick={serverWallet}>
+            Use DeltaDesk&apos;s server wallet (Plan B)
+          </Btn>
+        )}
       </div>
-      {planB && <p className="max-w-[68ch] text-[0.82rem] leading-relaxed text-paper-dim">If this Dynamic environment allows only one embedded wallet per user, use Plan B: a DeltaDesk-held 2-of-2 server wallet becomes the Operator. Your Vault still owns the lane.</p>}
+      {planB && planBProbed && (
+        <p className="max-w-[68ch] text-[0.82rem] leading-relaxed text-paper-dim">
+          {planBOffered
+            ? "If this Dynamic environment allows only one embedded wallet per user, use Plan B: a DeltaDesk-held 2-of-2 server wallet becomes the Operator. Your Vault still owns the lane."
+            : "Plan B (a DeltaDesk-held server wallet as the Operator) is not configured on this deployment, so the Operator has to be a second embedded wallet on this account: pick one above, or retry. The desk that is already running can be read without signing in at /desk/<lane address>."}
+        </p>
+      )}
       <TxLine state={action.state} />
     </div>
   );

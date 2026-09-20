@@ -10,3 +10,7 @@ contracts/node_modules/
 contracts/out/
 contracts/cache/
 contracts/broadcast/*/31337/
+contracts/broadcast/*/*/dry-run/
+.DS_Store
+*.m4a
+*.mov

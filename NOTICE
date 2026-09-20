@@ -1,0 +1,9 @@
+DeltaDesk
+Copyright (c) 2026 DeltaDesk
+
+Licensed under the MIT License. See LICENSE.
+
+DeltaDesk is informational analytics and self-directed software. It is not investment advice, and it makes no
+representation about trading outcomes. Figures published by this project are estimates reconstructed from public
+on-chain data and public price feeds; the method and its caveats are documented in docs/m0-killtest.md and
+docs/m1-truth-study.md and on https://web-production-10951.up.railway.app/study.
