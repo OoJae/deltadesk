@@ -77,7 +77,8 @@ The form has no Bankr-specific field. These are the points to cover in the video
    `README.md`.
 2. ☐ `FEEDBACK.md` is at the repo root: https://github.com/OoJae/deltadesk/blob/main/FEEDBACK.md.
 3. ☐ **Fill in the Uniswap Developer Feedback Form**, https://developers.uniswap.org/hackathon-feedback, and include
-   the FEEDBACK.md link. Uniswap audits submissions that skip it.
+   the FEEDBACK.md link. The form itself states no eligibility rule (checked 2026-09-20: "Tell us how your
+   hackathon went"), but the track is about developer feedback and it is the sponsor's own ask, so do it.
 4. ☐ Select **Uniswap** in the Runtime form.
 
 ### Dynamic
