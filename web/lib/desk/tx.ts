@@ -159,6 +159,17 @@ export type SentTx = { hash: Hash; receipt: TransactionReceipt };
  * Simulate `data` from the wallet, send it, wait for the receipt. `onHash` fires as soon as the tx is broadcast so the
  * UI can link it while it confirms. Throws with a decodable error on revert.
  */
+/** A plain native-ETH transfer from the wallet (no calldata), waited to its receipt. */
+export async function sendValueFromWallet(wallet: EthereumWallet, to: Address, value: bigint, onHash?: (h: Hash) => void): Promise<SentTx> {
+  await onRobinhood(wallet);
+  const wc = await wallet.getWalletClient(String(CHAIN_ID));
+  const hash = await wc.sendTransaction({ account: wc.account, chain: robinhood, to, value, gas: BigInt(21000) });
+  onHash?.(hash);
+  const receipt = await publicClient.waitForTransactionReceipt({ hash, pollingInterval: 250, timeout: 90_000 });
+  if (receipt.status !== "success") throw new Error("The transfer reverted on-chain. Open it in the explorer for details.");
+  return { hash, receipt };
+}
+
 export async function sendFromWallet(wallet: EthereumWallet, to: Address, data: Hex, onHash?: (h: Hash) => void): Promise<SentTx> {
   const account = wallet.address as Address;
   await publicClient.call({ account, to, data });

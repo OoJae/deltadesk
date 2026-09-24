@@ -217,3 +217,26 @@ Mon Sep 21; the M1 result it re-checks is in [docs/m1-truth-study.md](m1-truth-s
 | Result: USDG side / NVDA side | TBD / TBD |
 | PASS / FAIL vs the M1 tolerance | TBD |
 | Notes | TBD |
+
+## 7 · Wind-down (Thu 2026-09-24, ~02:05–02:25 UTC)
+
+The owner withdrew everything. The Railway project had been deleted at 00:33 UTC, so the withdrawal ran from a local copy
+of the web app (`/desk/<lane>` owner controls plus the new `/desk/send` page), every transaction signed by the owner's
+own Dynamic wallets. Destination for all funds: `0xAcaf4f0b077879AE36338e00f8d460c0e389e490` (on both chains).
+
+| Step | Signed by | Result |
+|---|---|---|
+| Deployer ETH → destination | deployer keystore | 0.000625 ETH, [`0xde731f00…ec16`](https://robinhoodchain.blockscout.com/tx/0xde731f001e35022b786ada400e0878add1359d2da9c7cfd0cf839cc889f1ec16) |
+| `withdrawAll()`: lane → Vault | Vault | 25.796085 USDG + 0.112258 NVDA; lane now empty (tx `0x3da7…89c7`) |
+| Revoke agent: `revokeOperator` on-chain + Dynamic delegation revoked | Vault | `operator()` = `0x0`; delegation revoked |
+| Vault USDG → destination | Vault | 25.796085 USDG, [`0x713e3c43…40f6`](https://robinhoodchain.blockscout.com/tx/0x713e3c43b8885b7d9cdb120426cebb0e62d59229fab3ce64904f5da79bfb40f6) |
+| Vault NVDA → destination | Vault | 0.112258 NVDA, [`0x99abda89…7d42`](https://robinhoodchain.blockscout.com/tx/0x99abda890cc237105dd47c6ad186f40e451d28f22342b2d5738f089ccb5d7d42) |
+| Vault ETH → destination | Vault | 0.001454 ETH, [`0x61f581a7…63c7`](https://robinhoodchain.blockscout.com/tx/0x61f581a7953fec50ab08977d5059eda6199a68c196b898fe4701b73270c963c7) |
+| Operator ETH → destination | Operator | 0.002489 ETH, [`0x4911c162…7de0`](https://robinhoodchain.blockscout.com/tx/0x4911c162187935b964fe8cceb3d5f1b84cb17108a79d2f88e453e85e3ea27de0) |
+| Bankr wallet USDC (Base) → destination | Bankr CLI | 1.949785 USDC, `0x58f64194…7bf7` on Base |
+
+Put in over the project: 50.79 USDG + 0.00519 ETH on Robinhood Chain and $2 USDC on Base (≈ $66.70). Returned: 25.796085
+USDG + 0.112258 NVDA + 0.004568 ETH on 4663 and 1.949785 USDC on Base (≈ $65.38 at Sep 24 prices). The difference is
+gas (deploy, createLane, the swap, two signals, the wind-down) and one $0.05 paid API call. About 0.0000064 ETH of dust
+stays across the Vault, Operator and deployer: each wallet's reserve for its own last transfer fee. The Dynamic test
+policy rule on Base was removed; no desk wallet holds anything else.
